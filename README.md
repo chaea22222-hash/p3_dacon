@@ -26,52 +26,44 @@ For binary targets, the training script uses `LightGBMClassifier` when LightGBM 
 
 ## Setup
 
-Use the project virtualenv if it already exists:
+This project uses Python 3.12.
+
+Install uv if not already available:
 
 ```bash
-source .venv/bin/activate
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-Install dependencies if needed:
+Install dependencies:
 
 ```bash
-python -m pip install -r requirements.txt
-python -m pip install pyarrow
+uv sync
 ```
-
-If `python` is not available on your shell, use `.venv/bin/python` or `python3`.
 
 ## Run
 
 Inspect the dataset:
 
 ```bash
-python src/inspect_data.py
+uv run python src/inspect_data.py
 ```
 
 Build features only:
 
 ```bash
-python src/make_features.py
+uv run python src/make_features.py
 ```
 
 Train models and create the submission from existing features:
 
 ```bash
-python src/train_baseline.py
+uv run python src/train_baseline.py
 ```
 
 Run the full pipeline:
 
 ```bash
-python src/run_first_submission.py
-```
-
-Equivalent virtualenv commands:
-
-```bash
-.venv/bin/python src/inspect_data.py
-.venv/bin/python src/run_first_submission.py
+uv run python src/run_first_submission.py
 ```
 
 ## Current Team Baseline: R3
