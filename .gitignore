@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+*.log
+
+data/raw/
+outputs/
+catboost_info/
+runs/
+
+.agents/
+.claude/
+.codex/
+.ipynb_checkpoints/
