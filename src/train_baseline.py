@@ -12,7 +12,7 @@ from sklearn.ensemble import (
     RandomForestRegressor,
 )
 from sklearn.impute import SimpleImputer
-from sklearn.metrics import accuracy_score, mean_absolute_error, mean_squared_error, r2_score
+from sklearn.metrics import accuracy_score, mean_absolute_error, mean_squared_error, r2_score, root_mean_squared_error
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OrdinalEncoder
@@ -176,7 +176,7 @@ def train_and_predict() -> tuple[pd.DataFrame, pd.DataFrame]:
         test_pred = np.where(pd.isna(test_pred), int(train_df[target].mode().iloc[0]), test_pred)
         submission[target] = test_pred
 
-        rmse = mean_squared_error(y_target, valid_pred_for_metrics, squared=False)
+        rmse = root_mean_squared_error(y_target, valid_pred_for_metrics)
         mae = mean_absolute_error(y_target, valid_pred_for_metrics)
         r2 = r2_score(y_target, valid_pred_for_metrics) if len(y_target) > 1 else np.nan
         accuracy = accuracy_score(y_target, valid_pred_for_metrics) if _is_binary_target(train_df[target]) else np.nan
