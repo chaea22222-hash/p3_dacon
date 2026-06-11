@@ -1,0 +1,4 @@
+[core]
+    remote = shared
+['remote "shared"']
+    url = /home/jinseok/dacon_project/dvc-storage
