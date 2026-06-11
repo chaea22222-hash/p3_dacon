@@ -72,6 +72,29 @@ Run the full pipeline:
 uv run python src/run_first_submission.py
 ```
 
+## MLflow
+
+The team shares a single MLflow server running on the lab server.
+
+Create a `.env` file in the project root (not committed to git):
+
+```bash
+cp .env.example .env
+```
+
+The MLflow UI is available at `http://localhost:5000` while connected to the server.
+
+To restart the MLflow server if it goes down:
+
+```bash
+nohup .venv/bin/mlflow server \
+  --backend-store-uri sqlite:///$HOME/dacon_project/mlflow.db \
+  --default-artifact-root $HOME/dacon_project/mlflow-artifacts \
+  --host 0.0.0.0 \
+  --port 5000 \
+  > /tmp/mlflow.log 2>&1 &
+```
+
 ## Current Team Baseline: R3
 
 The current team baseline is `r3`, because its Public leaderboard result was
