@@ -13,7 +13,7 @@ _Avoid_: 공유 디렉토리, 원격 저장소
 _Avoid_: 공유 디렉토리, 데이터 폴더
 
 **MLflow Server**:
-공용 서버에서 팀 전체가 공유하는 단일 MLflow 인스턴스. artifact store는 `~/dacon_project/mlflow-artifacts`, backend store는 `~/dacon_project/mlflow.db`(SQLite). 접속 주소는 팀원 각자의 `.env`에 `MLFLOW_TRACKING_URI`로 설정.
+공용 서버에서 팀 전체가 공유하는 단일 MLflow 인스턴스. artifact store는 `~/dacon_project/mlflow-artifacts`, backend store는 `~/dacon_project/mlflow.db`(SQLite). 접속 주소는 팀원 각자의 `.env`에 `MLFLOW_TRACKING_URI`로 설정. DVC와 무관하게 MLflow가 독립적으로 관리하며, 팀 공유가 목적이므로 각자의 프로젝트 폴더가 아닌 공유 디렉토리(`~/dacon_project/`)에 저장한다.
 _Avoid_: MLflow, 트래킹 서버
 
 **Experiment**:

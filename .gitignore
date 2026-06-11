@@ -12,3 +12,5 @@ runs/
 .claude/
 .codex/
 .ipynb_checkpoints/
+
+.env
