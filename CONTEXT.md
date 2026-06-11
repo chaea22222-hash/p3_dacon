@@ -17,8 +17,12 @@ _Avoid_: 공유 디렉토리, 데이터 폴더
 _Avoid_: MLflow, 트래킹 서버
 
 **Experiment**:
-MLflow에 등록되는 단일 학습 실행. 파라미터·지표·모델 아티팩트를 포함하며, 파일명이 다른 별도 스크립트가 아닌 동일 스크립트의 파라미터 변경으로 구분된다.
+MLflow에서 스크립트 단위로 구분되는 그룹 네임스페이스. `mlflow.set_experiment()`로 지정하며 현재 4개(baseline, improved, r3, v2)가 존재한다. 같은 Experiment 안에 여러 Run이 누적된다.
 _Avoid_: 실험 파일, 버전 스크립트
+
+**Run**:
+스크립트를 한 번 실행한 단위. `mlflow.start_run()`으로 생성되며, 파라미터·지표·아티팩트를 포함한다. 동일 스크립트의 파라미터 변경 시 새로운 Run이 쌓이며, Experiment 내에서 비교 대상이 된다.
+_Avoid_: 실험, 학습 기록
 
 **DVC Metadata**:
 `data/raw.dvc`. Working Data Directory의 MD5 해시와 구조 정보를 담은 소형 파일. git으로 추적되며 데이터 버전 이력을 기록.

@@ -24,6 +24,11 @@ The baseline prioritizes a valid, reproducible submission format over leaderboar
 
 For binary targets, the training script uses `LightGBMClassifier` when LightGBM is available. Otherwise it falls back to sklearn models.
 
+## Team Onboarding
+
+06/11 이후에 실행하시는 팀원은 **[docs/onboarding.md](docs/onboarding.md)** 를 먼저 읽어주세요.  
+DVC 데이터 pull, MLflow 서버 시작, 학습 스크립트 실행까지의 전체 과정이 안내되어 있습니다.
+
 ## Setup
 
 This project uses Python 3.12.
@@ -87,13 +92,16 @@ The MLflow UI is available at `http://localhost:5000` while connected to the ser
 To restart the MLflow server if it goes down:
 
 ```bash
-nohup .venv/bin/mlflow server \
+tmux new-session -d -s mlflow \
+  ".venv/bin/mlflow server \
   --backend-store-uri sqlite:///$HOME/dacon_project/mlflow.db \
   --default-artifact-root $HOME/dacon_project/mlflow-artifacts \
   --host 0.0.0.0 \
-  --port 5000 \
-  > /tmp/mlflow.log 2>&1 &
+  --port 5000"
 ```
+
+To check server status: `tmux ls`  
+To view server logs: `tmux attach -t mlflow`
 
 ## Current Team Baseline: R3
 
