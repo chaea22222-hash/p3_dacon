@@ -24,6 +24,11 @@ The baseline prioritizes a valid, reproducible submission format over leaderboar
 
 For binary targets, the training script uses `LightGBMClassifier` when LightGBM is available. Otherwise it falls back to sklearn models.
 
+## Team Onboarding
+
+06/11 이후에 실행하시는 팀원은 **[docs/onboarding.md](docs/onboarding.md)** 를 먼저 읽어주세요.  
+DVC 데이터 pull, MLflow 서버 시작, 학습 스크립트 실행까지의 전체 과정이 안내되어 있습니다.
+
 ## Setup
 
 This project uses Python 3.12.
