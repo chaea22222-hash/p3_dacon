@@ -40,6 +40,12 @@ Install dependencies:
 uv sync
 ```
 
+Pull data (requires DVC remote access):
+
+```bash
+dvc pull
+```
+
 ## Run
 
 Inspect the dataset:
