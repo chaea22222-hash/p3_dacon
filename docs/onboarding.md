@@ -22,6 +22,8 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 uv가 알아서 폴더 내의 .venv를 찾아 정확하게 패키지를 일치시켜 줍니다.
 
+추가 패키지 설치가 필요한 경우, `uv add <패키지명>` 으로 설치하시면 됩니다.
+
 코드를 실행할 때도 가상환경을 켤 필요 없이 **uv run 파이썬파일.py**로 실행하면 안전합니다.
 
 ```bash
