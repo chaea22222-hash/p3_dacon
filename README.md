@@ -1,127 +1,117 @@
-# DACON 5th ETRI Human Understanding AI Baseline
+# DACON 제5회 ETRI 인간 이해 AI — 팀 MLOps 파이프라인
 
-This repository contains a first-submission baseline pipeline for the DACON 5th ETRI Human Understanding AI competition.
+DACON 제5회 ETRI 인간 이해 AI 대회를 위한 팀 MLOps 파이프라인입니다.
 
-The baseline prioritizes a valid, reproducible submission format over leaderboard score. The current version is a lightly improved baseline for team sharing. It:
+대회 참가와 함께 MLOps 실습 환경 구축을 목표로 합니다. 현재 파이프라인은 다음을 갖추고 있습니다:
 
-- inspects the raw CSV/parquet schemas,
-- derives the prediction key as `subject_id + lifelog_date`,
-- aggregates every parquet item file by daily subject key,
-- expands selected nested/list sensor columns into safe daily summaries,
-- adds simple `lifelog_date` features,
-- trains one target model per label column,
-- preserves the sample submission column order exactly.
+- **uv**: 재현 가능한 패키지 환경 관리
+- **DVC**: 대회 원본 데이터 버전 관리 (팀 공유 서버 연동)
+- **MLflow**: 실험 파라미터·지표 추적 및 팀 간 비교 (`leaderboard_score` 기준)
+- 4개 학습 스크립트 (baseline / improved / r3 / v2)
 
-## Feature Summary
+## 피처 요약
 
-- Numeric columns: daily `mean`, `std`, `min`, `max`, `median`, `count`
-- `heart_rate`: list length and numeric heart-rate summaries
-- `m_gps`: fast GPS edge summaries such as first speed/altitude/lat/lon and last speed
-- `m_wifi`, `m_ble`: detected count and RSSI summaries
-- `m_usage_stats`: app count and total-time summaries
-- `m_ambience`: list length and top sound score summary
-- Date features: day, day of week, weekend flag, month, day index
+- 수치형 컬럼: 일별 `mean`, `std`, `min`, `max`, `median`, `count`
+- `heart_rate`: 리스트 길이 및 심박수 수치 요약
+- `m_gps`: 첫/마지막 속도·고도·위경도 등 GPS 엣지 요약
+- `m_wifi`, `m_ble`: 감지 횟수 및 RSSI 요약
+- `m_usage_stats`: 앱 수 및 총 사용 시간 요약
+- `m_ambience`: 리스트 길이 및 상위 음향 점수 요약
+- 날짜 피처: 일, 요일, 주말 여부, 월, 날짜 인덱스
 
-For binary targets, the training script uses `LightGBMClassifier` when LightGBM is available. Otherwise it falls back to sklearn models.
+이진 타깃의 경우 LightGBM이 설치되어 있으면 `LightGBMClassifier`를, 없으면 sklearn 모델을 사용합니다.
 
-## Team Onboarding
+## 팀원 온보딩
 
-06/11 이후에 실행하시는 팀원은 **[docs/onboarding.md](docs/onboarding.md)** 를 먼저 읽어주세요.  
+처음 합류하는 팀원은 **[docs/onboarding.md](docs/onboarding.md)** 를 먼저 읽으세요.
 DVC 데이터 pull, MLflow 서버 시작, 학습 스크립트 실행까지의 전체 과정이 안내되어 있습니다.
 
-## Setup
+## 환경 설정
 
-This project uses Python 3.12.
+이 프로젝트는 Python 3.12를 사용합니다.
 
-Install uv if not already available:
+`uv`가 없다면 먼저 설치합니다:
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-Install dependencies:
+의존성 설치:
 
 ```bash
 uv sync
 ```
 
-Pull data (requires DVC remote access):
+데이터 받기 (DVC 원격 접근 필요):
 
 ```bash
 dvc pull
 ```
 
-## Run
+## 실행
 
-Inspect the dataset:
+데이터셋 검사:
 
 ```bash
-uv run python src/inspect_data.py
+uv run src/inspect_data.py
 ```
 
-Build features only:
+피처 생성만 실행:
 
 ```bash
-uv run python src/make_features.py
+uv run src/make_features.py
 ```
 
-Train models and create the submission from existing features:
+기존 피처로 모델 학습 및 제출 파일 생성:
 
 ```bash
-uv run python src/train_baseline.py
+uv run src/train_baseline.py
 ```
 
-Run the full pipeline:
+전체 파이프라인 한 번에 실행:
 
 ```bash
-uv run python src/run_first_submission.py
+uv run src/run_first_submission.py
 ```
 
 ## MLflow
 
-The team shares a single MLflow server running on the lab server.
+팀 전체가 공용 서버의 단일 MLflow 서버를 공유합니다.
 
-Create a `.env` file in the project root (not committed to git):
+프로젝트 루트에 `.env` 파일을 생성합니다 (git에 포함되지 않음):
 
 ```bash
 cp .env.example .env
 ```
 
-The MLflow UI is available at `http://localhost:5000` while connected to the server.
+서버에 접속된 상태에서 `http://localhost:5000`으로 MLflow 대시보드에 접근할 수 있습니다.
 
-To restart the MLflow server if it goes down:
-
-```bash
-tmux new-session -d -s mlflow \
-  ".venv/bin/mlflow server \
-  --backend-store-uri sqlite:///$HOME/dacon_project/mlflow.db \
-  --default-artifact-root $HOME/dacon_project/mlflow-artifacts \
-  --host 0.0.0.0 \
-  --port 5000"
-```
-
-To check server status: `tmux ls`  
-To view server logs: `tmux attach -t mlflow`
-
-## Current Team Baseline: R3
-
-The current team baseline is `r3`, because its Public leaderboard result was
-better than the later r4 sensor-rule adjustment.
+MLflow 서버 시작 (중복 실행 방지 포함):
 
 ```bash
-python src/train_r3.py
+bash scripts/start_mlflow.sh
 ```
 
-See `R3_TEAM_SHARE.md` for the exact preprocessing, interpolation parameters,
-validation caveat, and team experiment rules.
+서버 상태 확인: `tmux ls`
+서버 로그 확인: `tmux attach -t mlflow` (나올 때: `Ctrl+B` → `D`)
 
-## Outputs
+## 현재 팀 베이스라인: R3
 
-The full run writes:
+현재 팀 베이스라인은 `r3`입니다. r4 센서 규칙 조정보다 퍼블릭 리더보드 결과가 더 좋았기 때문입니다.
+
+```bash
+uv run src/train_r3.py
+```
+
+정확한 전처리, 보간 파라미터, 검증 주의사항, 팀 실험 규칙은 `R3_TEAM_SHARE.md`를 참고하세요.
+
+## 출력 파일
+
+전체 파이프라인 실행 시 생성되는 파일:
 
 - `outputs/features_train.csv`
 - `outputs/features_test.csv`
 - `outputs/submission_baseline.csv`
 - `outputs/validation_scores.csv`
 
-`outputs/submission_baseline.csv` has exactly the same columns and row order as `data/raw/ch2026_submission_sample.csv`.
+`outputs/submission_baseline.csv`는 `data/raw/ch2026_submission_sample.csv`와 컬럼 및 행 순서가 정확히 일치합니다.
