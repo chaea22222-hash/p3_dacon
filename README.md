@@ -87,13 +87,16 @@ The MLflow UI is available at `http://localhost:5000` while connected to the ser
 To restart the MLflow server if it goes down:
 
 ```bash
-nohup .venv/bin/mlflow server \
+tmux new-session -d -s mlflow \
+  ".venv/bin/mlflow server \
   --backend-store-uri sqlite:///$HOME/dacon_project/mlflow.db \
   --default-artifact-root $HOME/dacon_project/mlflow-artifacts \
   --host 0.0.0.0 \
-  --port 5000 \
-  > /tmp/mlflow.log 2>&1 &
+  --port 5000"
 ```
+
+To check server status: `tmux ls`  
+To view server logs: `tmux attach -t mlflow`
 
 ## Current Team Baseline: R3
 

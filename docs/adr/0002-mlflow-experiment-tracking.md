@@ -6,4 +6,4 @@ W&B는 클라우드 의존성이 생기고 서버 내 데이터 반출 문제가
 
 FastAPI 서빙(`dashboard` 브랜치)은 파일 경로가 아닌 MLflow Model Registry에서 직접 모델을 로드한다. 이로써 실험(2단계) → 모델 등록(3단계) → 서빙(5단계)이 MLflow를 축으로 단절 없이 연결된다.
 
-MLflow 서버 프로세스는 `tmux` 세션(`mlflow`)으로 유지한다. `systemd`는 관리자 권한이 필요하고 Docker는 설치 여부가 불확실하기 때문이다. 서버 재부팅 시 한 명의 담당자가 수동으로 재시작한다.
+MLflow 서버 프로세스는 `tmux` 세션(`mlflow`)으로 유지한다. `systemd`는 관리자 권한이 필요하고 Docker는 설치 여부가 불확실하며, `nohup` 대비 tmux는 `tmux attach -t mlflow`로 로그를 실시간 확인할 수 있어 팀 운영에 유리하다. 서버 재부팅 시 한 명의 담당자가 수동으로 재시작한다.
