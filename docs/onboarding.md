@@ -16,6 +16,14 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ## 1. 저장소 클론 및 의존성 설치
 
+📢 [팀 프로젝트 uv 사용 가이드]
+
+패키지 동기화를 할 때는 `deactivate`를 실행해서 기존의 venv 가상환경을 해제한 상태에서 프로젝트 루트 디렉토리로 이동해 **uv sync**만 입력해 주세요.
+
+uv가 알아서 폴더 내의 .venv를 찾아 정확하게 패키지를 일치시켜 줍니다.
+
+코드를 실행할 때도 가상환경을 켤 필요 없이 **uv run 파이썬파일.py**로 실행하면 안전합니다.
+
 ```bash
 git clone https://github.com/chaea22222-hash/p3_dacon.git
 cd p3_dacon
