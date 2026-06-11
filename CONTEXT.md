@@ -23,3 +23,9 @@ _Avoid_: 실험 파일, 버전 스크립트
 **DVC Metadata**:
 `data/raw.dvc`. Working Data Directory의 MD5 해시와 구조 정보를 담은 소형 파일. git으로 추적되며 데이터 버전 이력을 기록.
 _Avoid_: dvc 파일, 메타파일
+
+**Leaderboard Score**:
+대회 공식 평가지표. K개 타깃에 대한 Binary Log Loss의 평균.
+`Score = (1/K) * Σⱼ [ -(1/N) * Σᵢ (yᵢⱼ log pᵢⱼ + (1−yᵢⱼ) log(1−pᵢⱼ)) ]`
+낮을수록 좋음. MLflow에 `leaderboard_score` 키로 기록하며, 모든 학습 스크립트가 동일한 키를 사용하여 실험 간 비교의 기준이 된다.
+_Avoid_: log_loss, mean_log_loss, score

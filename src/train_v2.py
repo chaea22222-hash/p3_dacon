@@ -12,11 +12,15 @@ Key changes vs v1 (subject mean only):
 from __future__ import annotations
 
 import warnings
+import mlflow
 import numpy as np
 import pandas as pd
+from dotenv import load_dotenv
 from sklearn.metrics import log_loss
 from sklearn.impute import SimpleImputer
 from catboost import CatBoostClassifier
+
+load_dotenv()
 
 import sys
 from pathlib import Path
@@ -95,6 +99,7 @@ def _subject_mean(y: np.ndarray, subj: np.ndarray) -> np.ndarray:
 
 def train_and_predict():
     ensure_dirs()
+    mlflow.set_experiment("v2")
     train_labels, sample = load_train_sample()
     target_cols = infer_target_columns(train_labels, sample)
     print(f"Targets: {target_cols}")
@@ -124,78 +129,100 @@ def train_and_predict():
     submission = sample.copy()
     scores = []
 
-    for target in target_cols:
-        y_tr = tr[target].values
-        y_va = va[target].values
-        subj_tr = tr[SUBJECT_COL].values
-        subj_va = va[SUBJECT_COL].values
-        subj_te = test_df[SUBJECT_COL].values
+    with mlflow.start_run():
+        mlflow.log_params({
+            "top_k": TOP_K,
+            "train_ratio": 0.8,
+            "catboost_iterations": 300,
+            "catboost_learning_rate": 0.05,
+            "catboost_depth": 4,
+            "catboost_l2_leaf_reg": 5,
+            "catboost_seed": 42,
+        })
 
-        # Subject mean (training portion만 사용)
-        sm_tr = _subject_mean(y_tr, subj_tr)
-        tmp_means = pd.Series(y_tr, index=None).groupby(
-            pd.Series(subj_tr)).mean().to_dict()
-        global_mean = float(y_tr.mean())
-        sm_va = np.array([tmp_means.get(s, global_mean) for s in subj_va])
-        sm_te = np.array([tmp_means.get(s, global_mean) for s in subj_te])
+        for target in target_cols:
+            y_tr = tr[target].values
+            y_va = va[target].values
+            subj_tr = tr[SUBJECT_COL].values
+            subj_va = va[SUBJECT_COL].values
+            subj_te = test_df[SUBJECT_COL].values
 
-        # within-subject 상관 기반 피처 선택
-        top_feats = _select_features(tr, pd.Series(y_tr, name=target),
-                                     subj_tr, sensor_cols, TOP_K)
+            # Subject mean (training portion만 사용)
+            sm_tr = _subject_mean(y_tr, subj_tr)
+            tmp_means = pd.Series(y_tr, index=None).groupby(
+                pd.Series(subj_tr)).mean().to_dict()
+            global_mean = float(y_tr.mean())
+            sm_va = np.array([tmp_means.get(s, global_mean) for s in subj_va])
+            sm_te = np.array([tmp_means.get(s, global_mean) for s in subj_te])
 
-        # 피처 구성: [subject_mean] + top-k sensor (within-subject normalized)
-        def make_X(df_part, subj_arr, sm_arr, feat_list):
-            # within-subject z-score
-            X_s = df_part[feat_list].copy()
-            X_s["subj_mean"] = sm_arr
-            X_s[SUBJECT_COL] = subj_arr
-            return X_s
+            # within-subject 상관 기반 피처 선택
+            top_feats = _select_features(tr, pd.Series(y_tr, name=target),
+                                         subj_tr, sensor_cols, TOP_K)
 
-        X_tr_df = make_X(tr, subj_tr, sm_tr, top_feats)
-        X_va_df = make_X(va, subj_va, sm_va, top_feats)
-        X_te_df = make_X(test_df, subj_te, sm_te, top_feats)
+            # 피처 구성: [subject_mean] + top-k sensor (within-subject normalized)
+            def make_X(df_part, subj_arr, sm_arr, feat_list):
+                # within-subject z-score
+                X_s = df_part[feat_list].copy()
+                X_s["subj_mean"] = sm_arr
+                X_s[SUBJECT_COL] = subj_arr
+                return X_s
 
-        cat_features = [SUBJECT_COL]
+            X_tr_df = make_X(tr, subj_tr, sm_tr, top_feats)
+            X_va_df = make_X(va, subj_va, sm_va, top_feats)
+            X_te_df = make_X(test_df, subj_te, sm_te, top_feats)
 
-        model = _make_catboost(n_iter=300)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            model.fit(X_tr_df, y_tr, cat_features=cat_features)
+            cat_features = [SUBJECT_COL]
 
-        val_proba = model.predict_proba(X_va_df)[:, 1]
-        ll_model  = log_loss(y_va, np.clip(val_proba, PROB_CLIP, 1 - PROB_CLIP))
-        ll_sm     = log_loss(y_va, np.clip(sm_va,    PROB_CLIP, 1 - PROB_CLIP))
+            model = _make_catboost(n_iter=300)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                model.fit(X_tr_df, y_tr, cat_features=cat_features)
 
-        print(f"{target}: subj_mean={ll_sm:.5f}  catboost={ll_model:.5f}  "
-              f"delta={ll_sm - ll_model:+.5f}")
+            val_proba = model.predict_proba(X_va_df)[:, 1]
+            ll_model  = log_loss(y_va, np.clip(val_proba, PROB_CLIP, 1 - PROB_CLIP))
+            ll_sm     = log_loss(y_va, np.clip(sm_va,    PROB_CLIP, 1 - PROB_CLIP))
 
-        # Full data 재학습 후 test 예측
-        full_sm_tr = _subject_mean(train_df[target].values, train_df[SUBJECT_COL].values)
-        full_means = pd.Series(train_df[target].values).groupby(
-            pd.Series(train_df[SUBJECT_COL].values)).mean().to_dict()
-        sm_te_full = np.array([full_means.get(s, global_mean) for s in subj_te])
+            mlflow.log_metrics({
+                f"log_loss_subj_mean_{target}": float(ll_sm),
+                f"log_loss_catboost_{target}": float(ll_model),
+            })
+            print(f"{target}: subj_mean={ll_sm:.5f}  catboost={ll_model:.5f}  "
+                  f"delta={ll_sm - ll_model:+.5f}")
 
-        X_full_df = make_X(train_df, train_df[SUBJECT_COL].values, full_sm_tr, top_feats)
-        X_te_full = make_X(test_df, subj_te, sm_te_full, top_feats)
+            # Full data 재학습 후 test 예측
+            full_sm_tr = _subject_mean(train_df[target].values, train_df[SUBJECT_COL].values)
+            full_means = pd.Series(train_df[target].values).groupby(
+                pd.Series(train_df[SUBJECT_COL].values)).mean().to_dict()
+            sm_te_full = np.array([full_means.get(s, global_mean) for s in subj_te])
 
-        top_feats_full = _select_features(
-            train_df, train_df[target], train_df[SUBJECT_COL].values, sensor_cols, TOP_K
-        )
-        X_full_df = make_X(train_df, train_df[SUBJECT_COL].values, full_sm_tr, top_feats_full)
-        X_te_full = make_X(test_df, subj_te, sm_te_full, top_feats_full)
+            X_full_df = make_X(train_df, train_df[SUBJECT_COL].values, full_sm_tr, top_feats)
+            X_te_full = make_X(test_df, subj_te, sm_te_full, top_feats)
 
-        model_full = _make_catboost(n_iter=300)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            model_full.fit(X_full_df, train_df[target].values, cat_features=cat_features)
+            top_feats_full = _select_features(
+                train_df, train_df[target], train_df[SUBJECT_COL].values, sensor_cols, TOP_K
+            )
+            X_full_df = make_X(train_df, train_df[SUBJECT_COL].values, full_sm_tr, top_feats_full)
+            X_te_full = make_X(test_df, subj_te, sm_te_full, top_feats_full)
 
-        test_proba = model_full.predict_proba(X_te_full)[:, 1]
-        submission[target] = np.clip(test_proba, PROB_CLIP, 1 - PROB_CLIP)
+            model_full = _make_catboost(n_iter=300)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                model_full.fit(X_full_df, train_df[target].values, cat_features=cat_features)
 
-        scores.append({"target": target, "log_loss_subj_mean": ll_sm,
-                       "log_loss_catboost": ll_model, "n_val": len(y_va)})
+            test_proba = model_full.predict_proba(X_te_full)[:, 1]
+            submission[target] = np.clip(test_proba, PROB_CLIP, 1 - PROB_CLIP)
 
-    scores_df = pd.DataFrame(scores)
+            scores.append({"target": target, "log_loss_subj_mean": ll_sm,
+                           "log_loss_catboost": ll_model, "n_val": len(y_va)})
+
+        scores_df = pd.DataFrame(scores)
+        mean_catboost = float(scores_df["log_loss_catboost"].mean())
+        mlflow.log_metrics({
+            "mean_log_loss_subj_mean": float(scores_df["log_loss_subj_mean"].mean()),
+            "mean_log_loss_catboost": mean_catboost,
+            "leaderboard_score": mean_catboost,
+        })
+
     print(f"\n=== Summary ===")
     print(scores_df.to_string(index=False))
     print(f"\nMean subj_mean log_loss : {scores_df['log_loss_subj_mean'].mean():.5f}")
