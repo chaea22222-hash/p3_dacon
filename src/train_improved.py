@@ -22,7 +22,11 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import mlflow
+from dotenv import load_dotenv
 from sklearn.metrics import log_loss
+
+load_dotenv()
 
 from pipeline_utils import (
     LABEL_META_COLS,
@@ -40,6 +44,7 @@ PROB_CLIP = 1e-6
 
 def train_and_predict() -> tuple[pd.DataFrame, pd.DataFrame]:
     ensure_dirs()
+    mlflow.set_experiment("improved")
     train_labels, sample = load_train_sample()
     target_cols = infer_target_columns(train_labels, sample)
     print(f"Target columns: {target_cols}")
@@ -47,24 +52,30 @@ def train_and_predict() -> tuple[pd.DataFrame, pd.DataFrame]:
     submission = sample.copy()
     scores = []
 
-    for target in target_cols:
-        # Compute per-subject probability from training data
-        subject_means = train_labels.groupby(SUBJECT_COL)[target].mean()
+    with mlflow.start_run():
+        mlflow.log_params({"strategy": "subject_mean", "prob_clip": PROB_CLIP})
 
-        # Test set: map each subject to their training mean
-        test_pred = sample[SUBJECT_COL].map(subject_means).clip(PROB_CLIP, 1 - PROB_CLIP)
-        submission[target] = test_pred.values
+        for target in target_cols:
+            # Compute per-subject probability from training data
+            subject_means = train_labels.groupby(SUBJECT_COL)[target].mean()
 
-        # Approximate OOF log loss (in-sample, slight optimism due to including self in mean)
-        train_pred = train_labels[SUBJECT_COL].map(subject_means).clip(PROB_CLIP, 1 - PROB_CLIP)
-        ll = log_loss(train_labels[target], train_pred)
+            # Test set: map each subject to their training mean
+            test_pred = sample[SUBJECT_COL].map(subject_means).clip(PROB_CLIP, 1 - PROB_CLIP)
+            submission[target] = test_pred.values
 
-        scores.append({"target": target, "log_loss_approx": ll, "n_train": len(train_labels)})
-        print(f"{target}: approx_log_loss={ll:.5f}  "
-              f"pred_range=[{test_pred.min():.3f}, {test_pred.max():.3f}]")
+            # Approximate OOF log loss (in-sample, slight optimism due to including self in mean)
+            train_pred = train_labels[SUBJECT_COL].map(subject_means).clip(PROB_CLIP, 1 - PROB_CLIP)
+            ll = log_loss(train_labels[target], train_pred)
 
-    mean_ll = sum(r["log_loss_approx"] for r in scores) / len(scores)
-    print(f"\nMean approx log_loss: {mean_ll:.5f}")
+            scores.append({"target": target, "log_loss_approx": ll, "n_train": len(train_labels)})
+            mlflow.log_metric(f"log_loss_{target}", ll)
+            print(f"{target}: approx_log_loss={ll:.5f}  "
+                  f"pred_range=[{test_pred.min():.3f}, {test_pred.max():.3f}]")
+
+        mean_ll = sum(r["log_loss_approx"] for r in scores) / len(scores)
+        mlflow.log_metric("mean_log_loss", mean_ll)
+        mlflow.log_metric("leaderboard_score", mean_ll)
+        print(f"\nLeaderboard Score (mean log_loss): {mean_ll:.5f}")
 
     submission = submission[sample.columns]
     scores_df = pd.DataFrame(scores)
