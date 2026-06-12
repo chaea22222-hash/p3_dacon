@@ -306,6 +306,10 @@
     <div class="nav-item" data-tab="pipeline" onclick="switchTab(this)">
       <span class="icon">🔄</span> 파이프라인
     </div>
+    <div class="nav-label" style="margin-top:8px">MLOps</div>
+    <div class="nav-item" data-tab="mlflow" onclick="switchTab(this)">
+      <span class="icon">🧪</span> MLflow 실험
+    </div>
     <div class="nav-label" style="margin-top:8px">데이터</div>
     <div class="nav-item" data-tab="upload" onclick="switchTab(this)">
       <span class="icon">📂</span> 데이터 로드
@@ -582,6 +586,128 @@
         </p>
       </div>
     </div>
+
+
+    <!-- ────────────────── TAB: MLFLOW ────────────────── -->
+    <div class="tab-pane" id="tab-mlflow">
+      <div class="section-header">
+        <span class="section-title">🧪 MLflow 실험 추적</span>
+        <span class="section-sub">4개 Experiment의 leaderboard_score 비교 — FastAPI 서버 연동</span>
+      </div>
+
+      <!-- API 연결 설정 -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title"><span class="ct-dot" style="background:var(--accent)"></span>API 서버 연결
+          <span style="margin-left:auto;display:flex;gap:8px;align-items:center">
+            <span id="apiStatusDot" style="width:8px;height:8px;border-radius:50%;background:#30363d;display:inline-block"></span>
+            <span id="apiStatusText" style="font-size:11px;color:var(--muted)">연결 안 됨</span>
+          </span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input id="apiUrlInput" type="text" value="http://localhost:8000"
+            style="flex:1;min-width:200px;background:var(--surface2);border:1px solid var(--border);
+                   border-radius:var(--radius);padding:7px 12px;color:var(--text);font-size:13px;
+                   font-family:monospace;outline:none"
+            placeholder="http://localhost:8000"
+            onkeydown="if(event.key==='Enter') connectApi()">
+          <button onclick="connectApi()"
+            style="padding:7px 18px;border-radius:var(--radius);border:1px solid var(--accent);
+                   background:rgba(59,130,246,0.15);color:var(--accent);font-size:13px;
+                   cursor:pointer;transition:all .15s;white-space:nowrap">
+            연결 확인
+          </button>
+          <button onclick="fetchAllExperiments()"
+            style="padding:7px 18px;border-radius:var(--radius);border:1px solid var(--border);
+                   background:transparent;color:var(--muted);font-size:13px;
+                   cursor:pointer;transition:all .15s;white-space:nowrap">
+            새로고침
+          </button>
+        </div>
+        <p style="font-size:11px;color:var(--muted);margin-top:10px">
+          ⚙️ FastAPI 서버가 실행 중이어야 합니다 —
+          <code style="color:#7dd3fc">uv run uvicorn api.main:app --reload</code>
+          &nbsp;|&nbsp; MLflow: <code style="color:#7dd3fc">bash scripts/start_mlflow.sh</code>
+        </p>
+      </div>
+
+      <!-- 실험 요약 카드 -->
+      <div id="expMetricsRow" class="metrics-row" style="margin-bottom:16px">
+        <div class="metric-card" style="opacity:.4"><div class="mc-label">baseline</div><div class="mc-value">—</div><div class="mc-sub">leaderboard_score</div></div>
+        <div class="metric-card" style="opacity:.4"><div class="mc-label">improved</div><div class="mc-value">—</div><div class="mc-sub">leaderboard_score</div></div>
+        <div class="metric-card" style="opacity:.4"><div class="mc-label">r3</div><div class="mc-value">—</div><div class="mc-sub">leaderboard_score</div></div>
+        <div class="metric-card" style="opacity:.4"><div class="mc-label">v2</div><div class="mc-value">—</div><div class="mc-sub">leaderboard_score</div></div>
+      </div>
+
+      <!-- 실험 비교 차트 -->
+      <div class="grid-2" style="margin-bottom:16px">
+        <div class="card">
+          <div class="card-title"><span class="ct-dot" style="background:var(--accent2)"></span>Experiment별 Best Score 비교
+            <span style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none;margin-left:auto">낮을수록 좋음</span>
+          </div>
+          <div class="chart-wrap" style="height:220px">
+            <canvas id="expScoreChart" role="img" aria-label="실험별 leaderboard score 막대차트"></canvas>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title"><span class="ct-dot" style="background:var(--purple)"></span>Run 히스토리 — 실험 선택
+            <span style="margin-left:auto">
+              <select id="expRunSelect" onchange="fetchRunHistory()"
+                style="background:var(--surface2);color:var(--text);border:1px solid var(--border);
+                       border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer">
+                <option value="baseline">baseline</option>
+                <option value="improved">improved</option>
+                <option value="r3" selected>r3</option>
+                <option value="v2">v2</option>
+              </select>
+            </span>
+          </div>
+          <div class="chart-wrap" style="height:220px">
+            <canvas id="runHistChart" role="img" aria-label="선택 실험의 run별 leaderboard score 라인차트"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- 실험 상세 테이블 -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title"><span class="ct-dot" style="background:var(--warn)"></span>실험 결과 상세</div>
+        <div style="overflow-x:auto">
+          <table class="data-table" id="expDetailTable">
+            <thead>
+              <tr>
+                <th>Experiment</th>
+                <th>Best Score</th>
+                <th>Run ID</th>
+                <th>주요 파라미터</th>
+                <th>상태</th>
+              </tr>
+            </thead>
+            <tbody id="expDetailBody">
+              <tr><td colspan="5" style="color:var(--muted);text-align:center;padding:24px">
+                API 서버에 연결하면 실험 결과가 표시됩니다
+              </td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 선택 실험의 Run 목록 -->
+      <div class="card">
+        <div class="card-title"><span class="ct-dot" style="background:var(--accent)"></span>Run 목록
+          <span id="runListExp" style="margin-left:6px;font-size:11px;color:var(--muted);font-weight:400;text-transform:none"></span>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table" id="runListTable">
+            <thead>
+              <tr><th>Run ID</th><th>leaderboard_score</th><th>파라미터</th><th>시작 시간</th></tr>
+            </thead>
+            <tbody id="runListBody">
+              <tr><td colspan="4" style="color:var(--muted);text-align:center;padding:24px">실험을 선택하세요</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
 
     <!-- ────────────────── TAB: PIPELINE ────────────────── -->
     <div class="tab-pane" id="tab-pipeline">
@@ -1712,6 +1838,210 @@ function renderEdaTimeline() {
     }
   });
 }
+
+
+/* ════════════════════════════════════════════════
+   MLFLOW TAB
+════════════════════════════════════════════════ */
+const EXP_COLORS = {
+  baseline: '#8b5cf6',
+  improved: '#10b981',
+  r3:       '#3b82f6',
+  v2:       '#f59e0b',
+};
+const EXP_NAMES = ['baseline', 'improved', 'r3', 'v2'];
+let ML = { apiUrl: 'http://localhost:8000', connected: false, expData: [] };
+
+function getApiUrl() {
+  return (document.getElementById('apiUrlInput')?.value || 'http://localhost:8000').replace(/\/$/, '');
+}
+
+async function connectApi() {
+  const url = getApiUrl();
+  ML.apiUrl = url;
+  const dot  = document.getElementById('apiStatusDot');
+  const text = document.getElementById('apiStatusText');
+  dot.style.background  = '#f59e0b';
+  text.textContent = '연결 중...';
+  try {
+    const res = await fetch(url + '/health', { signal: AbortSignal.timeout(4000) });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      dot.style.background  = '#10b981';
+      text.textContent = '연결됨 · ' + (data.mlflow_uri || url);
+      ML.connected = true;
+      fetchAllExperiments();
+    } else { throw new Error('bad status'); }
+  } catch (e) {
+    dot.style.background  = '#ef4444';
+    text.textContent = '연결 실패 — 서버를 먼저 시작하세요';
+    ML.connected = false;
+  }
+}
+
+async function fetchAllExperiments() {
+  if (!ML.connected) { connectApi(); return; }
+  try {
+    const res  = await fetch(ML.apiUrl + '/experiments');
+    const data = await res.json();
+    ML.expData = data.experiments || [];
+    renderExpMetrics();
+    renderExpScoreChart();
+    renderExpDetailTable();
+    fetchRunHistory();
+  } catch (e) {
+    console.error('fetchAllExperiments error:', e);
+  }
+}
+
+function renderExpMetrics() {
+  const row = document.getElementById('expMetricsRow');
+  if (!row) return;
+  row.innerHTML = EXP_NAMES.map(name => {
+    const exp = ML.expData.find(e => e.experiment === name);
+    const score = exp?.leaderboard_score;
+    const color = EXP_COLORS[name] || '#888';
+    const isBest = ML.expData.length && ML.expData[0]?.experiment === name;
+    return `<div class="metric-card" style="border-color:${isBest ? color : 'var(--border)'}">
+      <div class="mc-label" style="color:${color}">${name}${isBest ? ' 🏆' : ''}</div>
+      <div class="mc-value" style="font-size:20px">${score != null ? score.toFixed(4) : '—'}</div>
+      <div class="mc-sub">leaderboard_score</div>
+    </div>`;
+  }).join('');
+}
+
+function renderExpScoreChart() {
+  destroyChart('expScore');
+  const labels = ML.expData.map(e => e.experiment);
+  const scores = ML.expData.map(e => e.leaderboard_score);
+  const colors = labels.map(n => (EXP_COLORS[n] || '#888') + 'cc');
+  if (!labels.length) return;
+  G.charts['expScore'] = new Chart(document.getElementById('expScoreChart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'leaderboard_score',
+        data: scores,
+        backgroundColor: colors,
+        borderRadius: 5, borderSkipped: false,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => `score: ${ctx.raw?.toFixed(4) ?? '—'}` } }
+      },
+      scales: {
+        x: { ticks: { color:'#8b949e', font:{size:12} }, grid: { color:'rgba(48,54,61,0.4)' } },
+        y: {
+          ticks: { color:'#8b949e', font:{size:10} }, grid: { color:'rgba(48,54,61,0.4)' },
+          title: { display:true, text:'Log-Loss (낮을수록 좋음)', color:'#8b949e', font:{size:10} }
+        }
+      }
+    }
+  });
+}
+
+function renderExpDetailTable() {
+  const tbody = document.getElementById('expDetailBody');
+  if (!tbody) return;
+  if (!ML.expData.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="color:var(--muted);text-align:center;padding:24px">데이터 없음</td></tr>';
+    return;
+  }
+  tbody.innerHTML = ML.expData.map((exp, i) => {
+    const color = EXP_COLORS[exp.experiment] || '#888';
+    const score = exp.leaderboard_score != null ? exp.leaderboard_score.toFixed(4) : '—';
+    const runId = exp.run_id ? exp.run_id.slice(0,8) + '...' : '—';
+    const params = exp.params ? Object.entries(exp.params).slice(0,3).map(([k,v])=>`${k}=${v}`).join(', ') : '—';
+    const badge = i === 0
+      ? `<span class="badge badge-green">🏆 Best</span>`
+      : `<span style="font-size:11px;color:var(--muted)">#${i+1}</span>`;
+    return `<tr>
+      <td><strong style="color:${color}">${exp.experiment}</strong></td>
+      <td style="font-family:monospace;font-size:13px">${score}</td>
+      <td style="font-family:monospace;font-size:11px;color:var(--muted)">${runId}</td>
+      <td style="font-size:11px;color:var(--muted)">${params}</td>
+      <td>${badge}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function fetchRunHistory() {
+  const expName = document.getElementById('expRunSelect')?.value || 'r3';
+  document.getElementById('runListExp').textContent = `— ${expName}`;
+  if (!ML.connected) return;
+  try {
+    const res  = await fetch(`${ML.apiUrl}/experiments/${expName}/runs?max_results=20`);
+    const data = await res.json();
+    renderRunHistChart(expName, data.runs || []);
+    renderRunListTable(expName, data.runs || []);
+  } catch (e) {
+    console.error('fetchRunHistory error:', e);
+  }
+}
+
+function renderRunHistChart(expName, runs) {
+  destroyChart('runHist');
+  if (!runs.length) return;
+  const color = EXP_COLORS[expName] || '#3b82f6';
+  const labels = runs.map((_, i) => `Run ${i+1}`).reverse();
+  const scores = runs.map(r => r.leaderboard_score).reverse();
+  G.charts['runHist'] = new Chart(document.getElementById('runHistChart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'leaderboard_score',
+        data: scores,
+        borderColor: color,
+        backgroundColor: color + '22',
+        borderWidth: 2, pointRadius: 4, pointBackgroundColor: color,
+        tension: 0.2, fill: true,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => `score: ${ctx.raw?.toFixed(4) ?? '—'}` } }
+      },
+      scales: {
+        x: { ticks: { color:'#8b949e', font:{size:10} }, grid: { color:'rgba(48,54,61,0.4)' } },
+        y: { ticks: { color:'#8b949e', font:{size:10} }, grid: { color:'rgba(48,54,61,0.4)' },
+             title: { display:true, text:'Log-Loss', color:'#8b949e', font:{size:10} } }
+      }
+    }
+  });
+}
+
+function renderRunListTable(expName, runs) {
+  const tbody = document.getElementById('runListBody');
+  if (!tbody) return;
+  const color = EXP_COLORS[expName] || '#3b82f6';
+  if (!runs.length) {
+    tbody.innerHTML = '<tr><td colspan="4" style="color:var(--muted);text-align:center;padding:24px">Run 없음</td></tr>';
+    return;
+  }
+  tbody.innerHTML = runs.map((run, i) => {
+    const score = run.leaderboard_score != null ? run.leaderboard_score.toFixed(4) : '—';
+    const runId = (run.run_id || '').slice(0, 12) + '...';
+    const params = run.params ? Object.entries(run.params).slice(0,4).map(([k,v])=>`${k}=${v}`).join(' · ') : '—';
+    const ts = run.start_time ? new Date(run.start_time).toLocaleString('ko-KR') : '—';
+    const isBest = i === 0;
+    return `<tr>
+      <td style="font-family:monospace;font-size:11px;color:var(--muted)">${runId}</td>
+      <td style="font-family:monospace;font-size:13px;color:${isBest ? color : 'var(--text)'};font-weight:${isBest?600:400}">
+        ${score}${isBest ? ' ★' : ''}
+      </td>
+      <td style="font-size:11px;color:var(--muted)">${params}</td>
+      <td style="font-size:11px;color:var(--muted)">${ts}</td>
+    </tr>`;
+  }).join('');
+}
+
 
 /* ════════════════════════════════════════════════
    PIPELINE TAB
