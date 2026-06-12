@@ -14,9 +14,13 @@ from __future__ import annotations
 
 from typing import Dict, Tuple
 
+import mlflow
 import numpy as np
 import pandas as pd
+from dotenv import load_dotenv
 from sklearn.metrics import log_loss
+
+load_dotenv()
 
 from pipeline_utils import (
     DATE_COL,
@@ -113,6 +117,7 @@ def predict_target(
 
 def train_and_predict() -> tuple[pd.DataFrame, pd.DataFrame]:
     ensure_dirs()
+    mlflow.set_experiment("r3")
     train, sample = load_train_sample()
     target_cols = infer_target_columns(train, sample)
     train = _prepare_dates(train)
@@ -121,25 +126,38 @@ def train_and_predict() -> tuple[pd.DataFrame, pd.DataFrame]:
     submission = sample.copy()
     scores = []
 
-    print(f"r3 target parameters: {TARGET_PARAMS}")
-    for target in target_cols:
-        oof_pred = predict_target(train, train, target, exclude_self=True)
-        test_pred = predict_target(train, sample_dates, target, exclude_self=False)
-        score = log_loss(train[target], oof_pred)
+    with mlflow.start_run():
+        flat_params = {"prob_clip": PROB_CLIP}
+        for t, (window, decay, alpha) in TARGET_PARAMS.items():
+            flat_params[f"{t}_window"] = window
+            flat_params[f"{t}_decay"] = decay
+            flat_params[f"{t}_alpha"] = alpha
+        mlflow.log_params(flat_params)
 
-        submission[target] = test_pred
-        scores.append({"target": target, "log_loss_oof": score})
-        print(
-            f"{target}: OOF log_loss={score:.6f}, "
-            f"test_range=[{test_pred.min():.4f}, {test_pred.max():.4f}]"
-        )
+        print(f"r3 target parameters: {TARGET_PARAMS}")
+        for target in target_cols:
+            oof_pred = predict_target(train, train, target, exclude_self=True)
+            test_pred = predict_target(train, sample_dates, target, exclude_self=False)
+            score = log_loss(train[target], oof_pred)
+
+            submission[target] = test_pred
+            scores.append({"target": target, "log_loss_oof": score})
+            mlflow.log_metric(f"log_loss_oof_{target}", score)
+            print(
+                f"{target}: OOF log_loss={score:.6f}, "
+                f"test_range=[{test_pred.min():.4f}, {test_pred.max():.4f}]"
+            )
+
+        scores_df = pd.DataFrame(scores)
+        mean_oof = scores_df["log_loss_oof"].mean()
+        mlflow.log_metric("mean_log_loss_oof", mean_oof)
+        mlflow.log_metric("leaderboard_score", float(mean_oof))
+        print(f"\nLeaderboard Score (mean OOF log_loss): {mean_oof:.6f}")
 
     submission = submission[sample.columns]
     scores_df = pd.DataFrame(scores)
     submission.to_csv(SUBMISSION_PATH, index=False)
     scores_df.to_csv(SCORES_PATH, index=False)
-
-    print(f"\nMean OOF log_loss: {scores_df['log_loss_oof'].mean():.6f}")
     print(f"Saved {SUBMISSION_PATH}")
     print(f"Saved {SCORES_PATH}")
     return submission, scores_df

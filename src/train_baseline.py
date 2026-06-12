@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import warnings
 
+import mlflow
 import numpy as np
 import pandas as pd
+from dotenv import load_dotenv
 from sklearn.compose import ColumnTransformer
+
+load_dotenv()
 from sklearn.ensemble import (
     HistGradientBoostingClassifier,
     HistGradientBoostingRegressor,
@@ -12,7 +16,7 @@ from sklearn.ensemble import (
     RandomForestRegressor,
 )
 from sklearn.impute import SimpleImputer
-from sklearn.metrics import accuracy_score, mean_absolute_error, mean_squared_error, r2_score
+from sklearn.metrics import accuracy_score, log_loss, mean_absolute_error, r2_score, root_mean_squared_error
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OrdinalEncoder
@@ -29,6 +33,8 @@ from pipeline_utils import (
     load_train_sample,
     print_frame_overview,
 )
+
+PROB_CLIP = 1e-6
 
 
 def _model_factory(task: str):
@@ -122,6 +128,7 @@ def _is_binary_target(series: pd.Series) -> bool:
 
 def train_and_predict() -> tuple[pd.DataFrame, pd.DataFrame]:
     ensure_dirs()
+    mlflow.set_experiment("baseline")
     train_labels, sample = load_train_sample()
     target_cols = infer_target_columns(train_labels, sample)
     print(f"Target columns: {target_cols}")
@@ -142,58 +149,83 @@ def train_and_predict() -> tuple[pd.DataFrame, pd.DataFrame]:
 
     submission = sample.copy()
     scores = []
-    for target in target_cols:
-        y = train_df[target]
-        valid_mask = y.notna()
-        X_target = X.loc[valid_mask].copy()
-        y_target = y.loc[valid_mask].copy()
-        if y_target.nunique(dropna=True) <= 1 or len(y_target) < 5:
-            fill_value = y_target.median() if len(y_target) else 0
-            valid_pred = np.full(len(y_target), fill_value)
-            test_pred = np.full(len(X_test), fill_value)
-            model_name = "constant"
-        else:
-            task = "classification" if _is_binary_target(y_target) else "regression"
-            stratify = y_target if y_target.nunique() <= 10 and y_target.value_counts().min() >= 2 else None
-            X_tr, X_va, y_tr, y_va = train_test_split(
-                X_target,
-                y_target,
-                test_size=0.2,
-                random_state=42,
-                stratify=stratify,
+
+    with mlflow.start_run():
+        mlflow.log_params({"test_size": 0.2, "random_state": 42})
+
+        for target in target_cols:
+            y = train_df[target]
+            valid_mask = y.notna()
+            X_target = X.loc[valid_mask].copy()
+            y_target = y.loc[valid_mask].copy()
+            proba_pred = None
+            if y_target.nunique(dropna=True) <= 1 or len(y_target) < 5:
+                fill_value = y_target.median() if len(y_target) else 0
+                valid_pred = np.full(len(y_target), fill_value)
+                test_pred = np.full(len(X_test), fill_value)
+                model_name = "constant"
+            else:
+                task = "classification" if _is_binary_target(y_target) else "regression"
+                stratify = y_target if y_target.nunique() <= 10 and y_target.value_counts().min() >= 2 else None
+                X_tr, X_va, y_tr, y_va = train_test_split(
+                    X_target,
+                    y_target,
+                    test_size=0.2,
+                    random_state=42,
+                    stratify=stratify,
+                )
+                pipe = _make_pipeline(X_target, task)
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    pipe.fit(X_tr, y_tr)
+                valid_pred = pipe.predict(X_va)
+                if task == "classification" and hasattr(pipe.named_steps["model"], "predict_proba"):
+                    proba_pred = np.clip(
+                        pipe.predict_proba(X_va)[:, 1], PROB_CLIP, 1 - PROB_CLIP
+                    )
+                test_pred = pipe.predict(X_test)
+                y_target = y_va
+                model_name = pipe.named_steps["model"].__class__.__name__
+
+            valid_pred_for_metrics = _coerce_predictions(valid_pred, sample[target], train_df[target])
+            test_pred = _coerce_predictions(test_pred, sample[target], train_df[target])
+            test_pred = np.where(pd.isna(test_pred), int(train_df[target].mode().iloc[0]), test_pred)
+            submission[target] = test_pred
+
+            rmse = root_mean_squared_error(y_target, valid_pred_for_metrics)
+            mae = mean_absolute_error(y_target, valid_pred_for_metrics)
+            r2 = r2_score(y_target, valid_pred_for_metrics) if len(y_target) > 1 else np.nan
+            accuracy = accuracy_score(y_target, valid_pred_for_metrics) if _is_binary_target(train_df[target]) else np.nan
+            ll = float(log_loss(y_target, proba_pred)) if proba_pred is not None else None
+            score_row = {
+                "target": target,
+                "model": model_name,
+                "n_train": int(valid_mask.sum()),
+                "rmse": rmse,
+                "mae": mae,
+                "r2": r2,
+                "accuracy": accuracy,
+                "log_loss": ll,
+            }
+            scores.append(score_row)
+            metrics = {f"rmse_{target}": float(rmse), f"mae_{target}": float(mae)}
+            if not np.isnan(accuracy):
+                metrics[f"accuracy_{target}"] = float(accuracy)
+            if ll is not None:
+                metrics[f"log_loss_{target}"] = ll
+            mlflow.log_metrics(metrics)
+            print(
+                f"{target}: RMSE={rmse:.5f} MAE={mae:.5f} "
+                f"ACC={accuracy:.5f} R2={r2:.5f} model={model_name}"
             )
-            pipe = _make_pipeline(X_target, task)
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                pipe.fit(X_tr, y_tr)
-            valid_pred = pipe.predict(X_va)
-            test_pred = pipe.predict(X_test)
-            y_target = y_va
-            model_name = pipe.named_steps["model"].__class__.__name__
 
-        valid_pred_for_metrics = _coerce_predictions(valid_pred, sample[target], train_df[target])
-        test_pred = _coerce_predictions(test_pred, sample[target], train_df[target])
-        test_pred = np.where(pd.isna(test_pred), int(train_df[target].mode().iloc[0]), test_pred)
-        submission[target] = test_pred
-
-        rmse = mean_squared_error(y_target, valid_pred_for_metrics, squared=False)
-        mae = mean_absolute_error(y_target, valid_pred_for_metrics)
-        r2 = r2_score(y_target, valid_pred_for_metrics) if len(y_target) > 1 else np.nan
-        accuracy = accuracy_score(y_target, valid_pred_for_metrics) if _is_binary_target(train_df[target]) else np.nan
-        score_row = {
-            "target": target,
-            "model": model_name,
-            "n_train": int(valid_mask.sum()),
-            "rmse": rmse,
-            "mae": mae,
-            "r2": r2,
-            "accuracy": accuracy,
-        }
-        scores.append(score_row)
-        print(
-            f"{target}: RMSE={rmse:.5f} MAE={mae:.5f} "
-            f"ACC={accuracy:.5f} R2={r2:.5f} model={model_name}"
-        )
+        scores_df = pd.DataFrame(scores)
+        mlflow.log_metric("mean_rmse", float(scores_df["rmse"].mean()))
+        ll_vals = [r["log_loss"] for r in scores if r.get("log_loss") is not None]
+        if ll_vals:
+            leaderboard_score = float(sum(ll_vals) / len(ll_vals))
+            mlflow.log_metric("leaderboard_score", leaderboard_score)
+            print(f"\nLeaderboard Score (mean log_loss): {leaderboard_score:.5f}")
 
     submission = submission[sample.columns]
     scores_df = pd.DataFrame(scores)
