@@ -68,8 +68,7 @@ S1, S3, S4는 시간 보간 없이 피험자 평균만 사용합니다.
 프로젝트 루트에서:
 
 ```bash
-source .venv/bin/activate
-python src/train_r3.py
+uv run src/train_r3.py
 ```
 
 생성 파일:

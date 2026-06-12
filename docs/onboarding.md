@@ -71,7 +71,7 @@ tmux ls
 bash scripts/start_mlflow.sh
 ```
 
-브라우저에서 `http://localhost:5000` 접속하면 MLflow 대시보드를 볼 수 있습니다.
+브라우저에서 `http://서버IP:5000` 접속하면 MLflow 대시보드를 볼 수 있습니다.
 
 서버 로그 확인: `tmux attach -t mlflow` (나올 때: `Ctrl+B` → `D`)
 
