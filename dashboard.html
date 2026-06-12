@@ -1,0 +1,2082 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ETRI Lifelog · XAI Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root {
+    --bg:       #0d1117;
+    --surface:  #161b22;
+    --surface2: #21262d;
+    --border:   #30363d;
+    --text:     #e6edf3;
+    --muted:    #8b949e;
+    --accent:   #3b82f6;
+    --accent2:  #10b981;
+    --warn:     #f59e0b;
+    --danger:   #ef4444;
+    --purple:   #8b5cf6;
+    --pink:     #ec4899;
+    --radius:   8px;
+    --radius-lg:12px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* ── HEADER ── */
+  header {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(13,17,23,0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 56px;
+  }
+  .logo {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 15px; font-weight: 600; letter-spacing: -0.3px;
+  }
+  .logo-dot {
+    width: 28px; height: 28px; border-radius: 7px;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--purple) 100%);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+  }
+  .header-meta { display: flex; align-items: center; gap: 12px; }
+  .badge {
+    padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 500;
+    border: 1px solid;
+  }
+  .badge-blue  { color: #60a5fa; border-color: #1d4ed8; background: rgba(59,130,246,0.1); }
+  .badge-green { color: #34d399; border-color: #065f46; background: rgba(16,185,129,0.1); }
+  .badge-amber { color: #fbbf24; border-color: #92400e; background: rgba(245,158,11,0.1); }
+  .badge-red   { color: #f87171; border-color: #7f1d1d; background: rgba(239,68,68,0.1);  }
+
+  /* ── LAYOUT ── */
+  .shell { display: flex; height: calc(100vh - 56px); overflow: hidden; }
+  .sidebar {
+    width: 220px; flex-shrink: 0;
+    border-right: 1px solid var(--border);
+    padding: 16px 12px;
+    overflow-y: auto;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .nav-label {
+    font-size: 10px; font-weight: 600; letter-spacing: 0.8px;
+    color: var(--muted); text-transform: uppercase;
+    padding: 8px 8px 4px;
+  }
+  .nav-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; border-radius: var(--radius);
+    cursor: pointer; color: var(--muted);
+    font-size: 13px; transition: all .15s;
+    border: 1px solid transparent;
+  }
+  .nav-item:hover { color: var(--text); background: var(--surface2); }
+  .nav-item.active {
+    color: var(--accent); background: rgba(59,130,246,0.1);
+    border-color: rgba(59,130,246,0.25);
+  }
+  .nav-item .icon { font-size: 16px; width: 18px; text-align: center; }
+  .main { flex: 1; overflow-y: auto; padding: 24px; }
+
+  /* ── UPLOAD ZONE ── */
+  #uploadZone {
+    border: 1.5px dashed var(--border);
+    border-radius: var(--radius-lg);
+    padding: 32px; text-align: center;
+    cursor: pointer; transition: all .2s;
+    margin-bottom: 24px;
+    background: var(--surface);
+  }
+  #uploadZone:hover, #uploadZone.drag { border-color: var(--accent); background: rgba(59,130,246,0.05); }
+  #uploadZone .uz-icon { font-size: 36px; margin-bottom: 8px; }
+  #uploadZone p { color: var(--muted); }
+  #uploadZone p span { color: var(--accent); font-weight: 500; }
+  #uploadZone small { display: block; margin-top: 6px; font-size: 11px; color: var(--muted); opacity: .7; }
+  #fileInput { display: none; }
+
+  /* ── DATA NOTICE ── */
+  .data-notice {
+    display: flex; align-items: center; gap: 10px;
+    background: rgba(245,158,11,0.08);
+    border: 1px solid rgba(245,158,11,0.25);
+    border-radius: var(--radius);
+    padding: 10px 14px; margin-bottom: 20px;
+    font-size: 12px; color: #fbbf24;
+  }
+
+  /* ── SECTION TITLE ── */
+  .section-header {
+    display: flex; align-items: baseline; gap: 10px;
+    margin-bottom: 16px;
+  }
+  .section-title { font-size: 16px; font-weight: 600; letter-spacing: -0.3px; }
+  .section-sub { font-size: 12px; color: var(--muted); }
+
+  /* ── METRIC CARDS ── */
+  .metrics-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px,1fr)); gap: 10px; margin-bottom: 20px; }
+  .metric-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px 16px;
+  }
+  .metric-card .mc-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  .metric-card .mc-value { font-size: 24px; font-weight: 600; letter-spacing: -1px; }
+  .metric-card .mc-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  /* ── GRID / CARDS ── */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; margin-bottom: 16px; }
+  @media(max-width:900px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 18px;
+  }
+  .card-title {
+    font-size: 12px; font-weight: 600; letter-spacing: 0.3px;
+    color: var(--muted); text-transform: uppercase; margin-bottom: 14px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .card-title .ct-dot { width: 6px; height: 6px; border-radius: 50%; }
+
+  /* ── TABS ── */
+  .tabs { display: none; }
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+
+  /* ── TARGET GRID ── */
+  .target-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px,1fr)); gap: 10px; margin-bottom: 20px; }
+  .target-chip {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 12px 14px;
+    cursor: pointer; transition: all .15s;
+  }
+  .target-chip:hover { border-color: var(--accent); }
+  .target-chip.sel { border-color: var(--accent); background: rgba(59,130,246,0.1); }
+  .tc-name { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; }
+  .tc-label { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .tc-val { font-size: 13px; font-weight: 600; margin-top: 6px; }
+
+  /* ── TABLE ── */
+  .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .data-table th {
+    text-align: left; padding: 8px 12px;
+    font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+  }
+  .data-table td { padding: 9px 12px; border-bottom: 1px solid rgba(48,54,61,0.5); }
+  .data-table tr:hover td { background: var(--surface2); }
+
+  /* ── PROGRESS BAR ── */
+  .pbar-wrap { display: flex; align-items: center; gap: 8px; }
+  .pbar { flex: 1; height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+  .pbar-fill { height: 100%; border-radius: 3px; transition: width .5s ease; }
+
+  /* ── XAI IMPORTANCE ── */
+  .xai-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .xai-feat { width: 170px; font-size: 12px; color: var(--muted); text-align: right; flex-shrink: 0; }
+  .xai-track { flex: 1; height: 12px; background: var(--surface2); border-radius: 6px; overflow: hidden; position: relative; }
+  .xai-pos { height: 100%; border-radius: 6px; }
+  .xai-neg { height: 100%; border-radius: 6px; float: right; }
+  .xai-num { width: 44px; font-size: 11px; color: var(--muted); text-align: right; }
+
+  /* ── PIPELINE ── */
+  .pipeline { display: flex; align-items: flex-start; gap: 0; overflow-x: auto; padding-bottom: 8px; }
+  .pipe-step {
+    display: flex; flex-direction: column; align-items: center;
+    min-width: 120px;
+  }
+  .pipe-box {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 12px 14px;
+    text-align: center; width: 110px;
+    transition: border-color .2s;
+  }
+  .pipe-box:hover { border-color: var(--accent); }
+  .pipe-box .pb-icon { font-size: 22px; margin-bottom: 4px; }
+  .pipe-box .pb-name { font-size: 11px; font-weight: 600; }
+  .pipe-box .pb-sub { font-size: 10px; color: var(--muted); margin-top: 2px; }
+  .pipe-arrow {
+    display: flex; align-items: center; padding-top: 28px;
+    color: var(--muted); font-size: 18px;
+  }
+  .pipe-box.highlight { border-color: var(--accent); background: rgba(59,130,246,0.08); }
+  .pipe-box.highlight .pb-name { color: var(--accent); }
+
+  /* ── FORMULA BOX ── */
+  .formula {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px 18px;
+    font-family: 'Courier New', monospace; font-size: 13px;
+    color: #7dd3fc; margin: 12px 0; line-height: 1.8;
+  }
+  .formula .comment { color: var(--muted); }
+
+  /* ── PARAM TABLE ── */
+  .param-chip {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: 11px; font-weight: 600; font-family: monospace;
+  }
+  .pc-blue   { background: rgba(59,130,246,0.15); color: #60a5fa; }
+  .pc-green  { background: rgba(16,185,129,0.15); color: #34d399; }
+  .pc-amber  { background: rgba(245,158,11,0.15);  color: #fbbf24; }
+  .pc-purple { background: rgba(139,92,246,0.15); color: #a78bfa; }
+  .pc-muted  { background: var(--surface2); color: var(--muted); }
+
+  /* ── SUBJECT TABLE BARS ── */
+  .subj-bar { display: inline-block; height: 8px; border-radius: 4px; vertical-align: middle; margin-right: 6px; }
+
+  /* ── CONFIDENCE ── */
+  .conf-high { color: #34d399; }
+  .conf-mid  { color: #fbbf24; }
+  .conf-low  { color: #f87171; }
+
+  /* ── DOW LABEL ── */
+  .dow-lbl { font-size: 10px; color: var(--muted); margin-top: 4px; }
+
+  /* ── CHART wrappers ── */
+  .chart-wrap { position: relative; width: 100%; }
+  .chart-wrap canvas { display: block; }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* ── LOADING ── */
+  #loadingOverlay {
+    position: fixed; inset: 0; background: rgba(13,17,23,0.85);
+    display: none; align-items: center; justify-content: center;
+    z-index: 999; flex-direction: column; gap: 12px;
+    font-size: 14px; color: var(--muted);
+  }
+  .spinner {
+    width: 36px; height: 36px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <div class="logo-dot">🧠</div>
+    ETRI Lifelog · XAI Dashboard
+  </div>
+  <div class="header-meta">
+    <span class="badge badge-blue">r3 baseline</span>
+    <span class="badge badge-green" id="dataSourceBadge">샘플 데이터</span>
+    <span class="badge badge-amber">Public LB 0.6045</span>
+    <span id="recordBadge" class="badge badge-red">— rows</span>
+  </div>
+</header>
+
+<!-- SHELL -->
+<div class="shell">
+
+  <!-- SIDEBAR -->
+  <nav class="sidebar">
+    <div class="nav-label">분석</div>
+    <div class="nav-item active" data-tab="predict" onclick="switchTab(this)">
+      <span class="icon">📊</span> 예측 결과
+    </div>
+    <div class="nav-item" data-tab="eda" onclick="switchTab(this)">
+      <span class="icon">🔬</span> 데이터 분석
+    </div>
+    <div class="nav-item" data-tab="xai" onclick="switchTab(this)">
+      <span class="icon">🔍</span> XAI 해석
+    </div>
+    <div class="nav-item" data-tab="pipeline" onclick="switchTab(this)">
+      <span class="icon">🔄</span> 파이프라인
+    </div>
+    <div class="nav-label" style="margin-top:8px">MLOps</div>
+    <div class="nav-item" data-tab="mlflow" onclick="switchTab(this)">
+      <span class="icon">🧪</span> MLflow 실험
+    </div>
+    <div class="nav-label" style="margin-top:8px">데이터</div>
+    <div class="nav-item" data-tab="upload" onclick="switchTab(this)">
+      <span class="icon">📂</span> 데이터 로드
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- ────────────────── TAB: UPLOAD ────────────────── -->
+    <div class="tab-pane" id="tab-upload">
+      <div class="section-header">
+        <span class="section-title">데이터 로드</span>
+        <span class="section-sub">ch2026_metrics_train.csv 또는 submission 형식 지원</span>
+      </div>
+
+      <div id="uploadZone"
+           onclick="document.getElementById('fileInput').click()"
+           ondragover="event.preventDefault(); this.classList.add('drag')"
+           ondragleave="this.classList.remove('drag')"
+           ondrop="handleDrop(event)">
+        <input type="file" id="fileInput" accept=".csv" onchange="handleFile(this.files[0])">
+        <div class="uz-icon">☁️</div>
+        <p><span>클릭</span> 또는 드래그 앤 드롭으로 CSV 업로드</p>
+        <small>subject_id · lifelog_date · Q1~S4 컬럼이 포함된 파일 · 최대 50MB</small>
+      </div>
+
+      <div id="uploadNotice" class="data-notice">
+        ⚠️ CSV를 업로드하지 않으면 5명 × 61일 <strong>샘플 데이터</strong>로 시연됩니다.
+      </div>
+
+      <div class="card">
+        <div class="card-title"><span class="ct-dot" style="background:var(--accent)"></span>현재 로드된 데이터</div>
+        <div class="metrics-row">
+          <div class="metric-card">
+            <div class="mc-label">총 레코드</div>
+            <div class="mc-value" id="statRows">—</div>
+          </div>
+          <div class="metric-card">
+            <div class="mc-label">피험자 수</div>
+            <div class="mc-value" id="statSubjects">—</div>
+          </div>
+          <div class="metric-card">
+            <div class="mc-label">관측 기간</div>
+            <div class="mc-value" id="statDays">—</div>
+          </div>
+          <div class="metric-card">
+            <div class="mc-label">타겟 컬럼</div>
+            <div class="mc-value" id="statTargets">—</div>
+          </div>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table" id="previewTable">
+            <thead><tr id="previewHead"></tr></thead>
+            <tbody id="previewBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ────────────────── TAB: PREDICT ────────────────── -->
+    <div class="tab-pane active" id="tab-predict">
+      <div class="section-header">
+        <span class="section-title">예측 결과 · 피험자별 분석</span>
+        <span class="section-sub">r3 Temporal Weighted Blend</span>
+      </div>
+
+      <div class="metrics-row" id="metricsRow"></div>
+
+      <div class="section-header" style="margin-top:4px">
+        <span class="section-title" style="font-size:13px">타겟 선택</span>
+      </div>
+      <div class="target-grid" id="targetGrid"></div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title" style="flex-wrap:wrap;gap:6px">
+            <span class="ct-dot" style="background:var(--accent)"></span>피험자별 예측 확률
+            <span style="margin-left:auto;display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+              <span style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none">필터</span>
+              <div id="subjFilterBtns" style="display:flex;gap:4px;flex-wrap:wrap"></div>
+            </span>
+          </div>
+          <div class="chart-wrap" style="height:220px"><canvas id="subjChart" role="img" aria-label="피험자별 예측 확률 막대차트"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><span class="ct-dot" style="background:var(--accent2)"></span>요일별 평균 패턴</div>
+          <div class="chart-wrap" style="height:220px"><canvas id="dowChart" role="img" aria-label="요일별 평균 레이더차트"></canvas></div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title" style="flex-wrap:wrap;gap:6px">
+            <span class="ct-dot" style="background:var(--purple)"></span>날짜별 추이
+            <span style="margin-left:auto;display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+              <span style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none">필터</span>
+              <div id="trendFilterBtns" style="display:flex;gap:4px;flex-wrap:wrap"></div>
+            </span>
+          </div>
+          <div class="chart-wrap" style="height:200px"><canvas id="trendChart" role="img" aria-label="날짜별 타겟 평균 추이"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title" style="flex-wrap:wrap;gap:4px">
+            <span class="ct-dot" style="background:var(--warn)"></span>OOF 예측값 분포 — 실제 0 vs 1 그룹
+            <span style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none;margin-left:auto">이진 레이블 → 그룹별 예측 분포로 시각화</span>
+          </div>
+          <div class="chart-wrap" style="height:200px"><canvas id="oofChart" role="img" aria-label="실제값 0과 1 그룹별 OOF 예측값 분포 막대차트"></canvas></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><span class="ct-dot" style="background:var(--accent2)"></span>피험자별 타겟 예측 요약</div>
+        <div style="overflow-x:auto">
+          <table class="data-table" id="subjTable">
+            <thead>
+              <tr>
+                <th>Subject</th>
+                <th>Q1 수면질</th>
+                <th>Q2 피로도</th>
+                <th>Q3 스트레스</th>
+                <th>S1 총수면</th>
+                <th>S2 수면효율</th>
+                <th>S3 수면지연</th>
+                <th>S4 각성</th>
+                <th>신뢰도</th>
+              </tr>
+            </thead>
+            <tbody id="subjTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ────────────────── TAB: XAI ────────────────── -->
+    <div class="tab-pane" id="tab-xai">
+      <div class="section-header">
+        <span class="section-title">XAI — 예측 근거 해석</span>
+        <span class="section-sub">각 요소가 최종 예측 확률에 미치는 영향</span>
+      </div>
+
+      <div class="data-notice" style="background:rgba(139,92,246,0.08); border-color:rgba(139,92,246,0.3); color:#a78bfa">
+        🧩 r3 모델은 센서 피처 없이 <strong>레이블 이력만</strong> 사용합니다. 아래 기여도는 r3 예측 구조에서 역산한 설명입니다.
+      </div>
+
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px" id="xaiTargetBtns"></div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title"><span class="ct-dot" style="background:var(--purple)"></span>특성 기여도 (SHAP-style)</div>
+          <div id="xaiBarWrap" style="margin-top:4px"></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><span class="ct-dot" style="background:var(--pink)"></span>예측 신뢰도 분포</div>
+          <div class="chart-wrap" style="height:220px"><canvas id="confChart" role="img" aria-label="예측 신뢰도 히스토그램"></canvas></div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title"><span class="ct-dot" style="background:var(--warn)"></span>타겟 간 상관관계</div>
+          <div class="chart-wrap" style="height:220px"><canvas id="corrChart" role="img" aria-label="타겟 간 상관관계 히트맵"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><span class="ct-dot" style="background:var(--accent2)"></span>Alpha 블렌딩 시각화</div>
+          <div id="alphaViz" style="margin-top:8px"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><span class="ct-dot" style="background:var(--accent)"></span>타겟별 OOF Log-Loss</div>
+        <div class="chart-wrap" style="height:180px"><canvas id="lossChart" role="img" aria-label="타겟별 OOF Log-Loss 막대차트"></canvas></div>
+      </div>
+    </div>
+
+    <!-- ────────────────── TAB: EDA ────────────────── -->
+    <div class="tab-pane" id="tab-eda">
+      <div class="section-header">
+        <span class="section-title">데이터 분석 (EDA)</span>
+        <span class="section-sub">실제 레이블 데이터 기반 탐색적 분석</span>
+      </div>
+
+      <!-- 요약 지표 -->
+      <div class="metrics-row" id="edaMetricsRow"></div>
+
+      <!-- 행 1: 타겟 분포 + 타겟 간 상관관계 -->
+      <div class="grid-2" style="margin-bottom:16px">
+        <div class="card">
+          <div class="card-title"><span class="ct-dot" style="background:var(--accent)"></span>타겟별 양성률 (클래스 1 비율)
+            <span style="margin-left:auto;font-size:10px;color:var(--muted);font-weight:400;text-transform:none">전체 피험자 평균</span>
+          </div>
+          <div class="chart-wrap" style="height:210px"><canvas id="edaPosRateChart" role="img" aria-label="타겟별 양성률 막대차트"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><span class="ct-dot" style="background:var(--purple)"></span>타겟 간 상관관계
+            <span style="margin-left:auto;font-size:10px;color:var(--muted);font-weight:400;text-transform:none">피어슨 r · 버블 크기 = |r|</span>
+          </div>
+          <div class="chart-wrap" style="height:210px"><canvas id="edaCorrChart" role="img" aria-label="타겟 간 상관관계 버블차트"></canvas></div>
+        </div>
+      </div>
+
+      <!-- 행 2: 클래스 불균형 도넛 + 피험자별 양성률 히트맵 -->
+      <div class="grid-2" style="margin-bottom:16px">
+        <div class="card">
+          <div class="card-title"><span class="ct-dot" style="background:var(--warn)"></span>타겟 선택 — 클래스 분포
+            <span style="margin-left:auto">
+              <select id="edaDonutTarget" onchange="renderEdaDonut()"
+                style="background:var(--surface2);color:var(--text);border:1px solid var(--border);
+                       border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer">
+              </select>
+            </span>
+          </div>
+          <div style="display:flex;align-items:center;gap:24px;height:210px">
+            <div style="position:relative;width:180px;height:180px;flex-shrink:0">
+              <canvas id="edaDonutChart" role="img" aria-label="선택 타겟 클래스 도넛차트"></canvas>
+            </div>
+            <div id="edaDonutStats" style="flex:1;font-size:13px"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title"><span class="ct-dot" style="background:var(--accent2)"></span>피험자 × 타겟 양성률 히트맵</div>
+          <div style="overflow-x:auto;height:210px;overflow-y:auto">
+            <table class="data-table" id="edaHeatmapTable" style="min-width:400px"></table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 행 3: 월별 추이 + 요일별 패턴 -->
+      <div class="grid-2" style="margin-bottom:16px">
+        <div class="card">
+          <div class="card-title"><span class="ct-dot" style="background:var(--accent)"></span>월별 양성률 추이
+            <span style="margin-left:auto;font-size:10px;color:var(--muted);font-weight:400;text-transform:none">전체 피험자 평균</span>
+          </div>
+          <div class="chart-wrap" style="height:200px"><canvas id="edaMonthChart" role="img" aria-label="월별 타겟 양성률 추이 라인차트"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><span class="ct-dot" style="background:var(--pink)"></span>요일별 양성률 패턴
+            <span style="margin-left:auto">
+              <select id="edaDowTarget" onchange="renderEdaDow()"
+                style="background:var(--surface2);color:var(--text);border:1px solid var(--border);
+                       border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer">
+              </select>
+            </span>
+          </div>
+          <div class="chart-wrap" style="height:200px"><canvas id="edaDowChart" role="img" aria-label="요일별 양성률 레이더차트"></canvas></div>
+        </div>
+      </div>
+
+      <!-- 행 4: 피험자별 레코드 수 + 연속 결측 패턴 -->
+      <div class="grid-2" style="margin-bottom:16px">
+        <div class="card">
+          <div class="card-title"><span class="ct-dot" style="background:var(--accent2)"></span>피험자별 레코드 수</div>
+          <div class="chart-wrap" style="height:200px"><canvas id="edaRecordChart" role="img" aria-label="피험자별 레코드 수 막대차트"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><span class="ct-dot" style="background:var(--danger)"></span>타겟별 결측값 현황</div>
+          <div class="chart-wrap" style="height:200px"><canvas id="edaMissingChart" role="img" aria-label="타겟별 결측값 비율 막대차트"></canvas></div>
+        </div>
+      </div>
+
+      <!-- 행 5: 피험자별 시계열 상세 -->
+      <div class="card">
+        <div class="card-title"><span class="ct-dot" style="background:var(--purple)"></span>피험자별 날짜별 레이블 시계열
+          <span style="margin-left:auto;display:flex;gap:6px;align-items:center">
+            <select id="edaTimelineSubj" onchange="renderEdaTimeline()"
+              style="background:var(--surface2);color:var(--text);border:1px solid var(--border);
+                     border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer">
+            </select>
+          </span>
+        </div>
+        <div class="chart-wrap" style="height:200px"><canvas id="edaTimelineChart" role="img" aria-label="선택 피험자 날짜별 레이블 라인차트"></canvas></div>
+        <p style="font-size:11px;color:var(--muted);margin-top:8px">
+          y=1: 양성, y=0: 음성 — 각 타겟의 실제 레이블이 날짜 순서로 표시됩니다.
+        </p>
+      </div>
+    </div>
+
+
+    <!-- ────────────────── TAB: MLFLOW ────────────────── -->
+    <div class="tab-pane" id="tab-mlflow">
+      <div class="section-header">
+        <span class="section-title">🧪 MLflow 실험 추적</span>
+        <span class="section-sub">4개 Experiment의 leaderboard_score 비교 — FastAPI 서버 연동</span>
+      </div>
+
+      <!-- API 연결 설정 -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title"><span class="ct-dot" style="background:var(--accent)"></span>API 서버 연결
+          <span style="margin-left:auto;display:flex;gap:8px;align-items:center">
+            <span id="apiStatusDot" style="width:8px;height:8px;border-radius:50%;background:#30363d;display:inline-block"></span>
+            <span id="apiStatusText" style="font-size:11px;color:var(--muted)">연결 안 됨</span>
+          </span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input id="apiUrlInput" type="text" value="http://localhost:8000"
+            style="flex:1;min-width:200px;background:var(--surface2);border:1px solid var(--border);
+                   border-radius:var(--radius);padding:7px 12px;color:var(--text);font-size:13px;
+                   font-family:monospace;outline:none"
+            placeholder="http://localhost:8000"
+            onkeydown="if(event.key==='Enter') connectApi()">
+          <button onclick="connectApi()"
+            style="padding:7px 18px;border-radius:var(--radius);border:1px solid var(--accent);
+                   background:rgba(59,130,246,0.15);color:var(--accent);font-size:13px;
+                   cursor:pointer;transition:all .15s;white-space:nowrap">
+            연결 확인
+          </button>
+          <button onclick="fetchAllExperiments()"
+            style="padding:7px 18px;border-radius:var(--radius);border:1px solid var(--border);
+                   background:transparent;color:var(--muted);font-size:13px;
+                   cursor:pointer;transition:all .15s;white-space:nowrap">
+            새로고침
+          </button>
+        </div>
+        <p style="font-size:11px;color:var(--muted);margin-top:10px">
+          ⚙️ FastAPI 서버가 실행 중이어야 합니다 —
+          <code style="color:#7dd3fc">uv run uvicorn api.main:app --reload</code>
+          &nbsp;|&nbsp; MLflow: <code style="color:#7dd3fc">bash scripts/start_mlflow.sh</code>
+        </p>
+      </div>
+
+      <!-- 실험 요약 카드 -->
+      <div id="expMetricsRow" class="metrics-row" style="margin-bottom:16px">
+        <div class="metric-card" style="opacity:.4"><div class="mc-label">baseline</div><div class="mc-value">—</div><div class="mc-sub">leaderboard_score</div></div>
+        <div class="metric-card" style="opacity:.4"><div class="mc-label">improved</div><div class="mc-value">—</div><div class="mc-sub">leaderboard_score</div></div>
+        <div class="metric-card" style="opacity:.4"><div class="mc-label">r3</div><div class="mc-value">—</div><div class="mc-sub">leaderboard_score</div></div>
+        <div class="metric-card" style="opacity:.4"><div class="mc-label">v2</div><div class="mc-value">—</div><div class="mc-sub">leaderboard_score</div></div>
+      </div>
+
+      <!-- 실험 비교 차트 -->
+      <div class="grid-2" style="margin-bottom:16px">
+        <div class="card">
+          <div class="card-title"><span class="ct-dot" style="background:var(--accent2)"></span>Experiment별 Best Score 비교
+            <span style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none;margin-left:auto">낮을수록 좋음</span>
+          </div>
+          <div class="chart-wrap" style="height:220px">
+            <canvas id="expScoreChart" role="img" aria-label="실험별 leaderboard score 막대차트"></canvas>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title"><span class="ct-dot" style="background:var(--purple)"></span>Run 히스토리 — 실험 선택
+            <span style="margin-left:auto">
+              <select id="expRunSelect" onchange="fetchRunHistory()"
+                style="background:var(--surface2);color:var(--text);border:1px solid var(--border);
+                       border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer">
+                <option value="baseline">baseline</option>
+                <option value="improved">improved</option>
+                <option value="r3" selected>r3</option>
+                <option value="v2">v2</option>
+              </select>
+            </span>
+          </div>
+          <div class="chart-wrap" style="height:220px">
+            <canvas id="runHistChart" role="img" aria-label="선택 실험의 run별 leaderboard score 라인차트"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- 실험 상세 테이블 -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title"><span class="ct-dot" style="background:var(--warn)"></span>실험 결과 상세</div>
+        <div style="overflow-x:auto">
+          <table class="data-table" id="expDetailTable">
+            <thead>
+              <tr>
+                <th>Experiment</th>
+                <th>Best Score</th>
+                <th>Run ID</th>
+                <th>주요 파라미터</th>
+                <th>상태</th>
+              </tr>
+            </thead>
+            <tbody id="expDetailBody">
+              <tr><td colspan="5" style="color:var(--muted);text-align:center;padding:24px">
+                API 서버에 연결하면 실험 결과가 표시됩니다
+              </td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 선택 실험의 Run 목록 -->
+      <div class="card">
+        <div class="card-title"><span class="ct-dot" style="background:var(--accent)"></span>Run 목록
+          <span id="runListExp" style="margin-left:6px;font-size:11px;color:var(--muted);font-weight:400;text-transform:none"></span>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table" id="runListTable">
+            <thead>
+              <tr><th>Run ID</th><th>leaderboard_score</th><th>파라미터</th><th>시작 시간</th></tr>
+            </thead>
+            <tbody id="runListBody">
+              <tr><td colspan="4" style="color:var(--muted);text-align:center;padding:24px">실험을 선택하세요</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ────────────────── TAB: PIPELINE ────────────────── -->
+    <div class="tab-pane" id="tab-pipeline">
+      <div class="section-header">
+        <span class="section-title">MLOps 파이프라인</span>
+        <span class="section-sub">데이터 수집 → 피처 엔지니어링 → 모델 → XAI → 배포</span>
+      </div>
+
+      <!-- Flow -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title"><span class="ct-dot" style="background:var(--accent)"></span>전체 흐름</div>
+        <div class="pipeline" id="pipelineViz"></div>
+      </div>
+
+      <!-- r3 Formula -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title"><span class="ct-dot" style="background:var(--purple)"></span>r3 핵심 수식</div>
+        <div class="formula">
+<span class="comment"># 피험자 사전 확률 (anchor)</span>
+subject_mean  = mean(labels | same subject_id)
+
+<span class="comment"># 시간적 지수 감쇠 가중 평균</span>
+weight        = exp( -|train_date - pred_date| / decay )
+local_avg     = Σ(weight × label) / Σ(weight)
+
+<span class="comment"># 최종 블렌딩</span>
+prediction    = α × subject_mean + (1 - α) × local_avg
+prediction    = clip(prediction, 1e-6, 1-1e-6)
+        </div>
+        <p style="font-size:12px; color:var(--muted); margin-top:8px">
+          ⚠️ OOF 검증 시 <code style="color:#7dd3fc">exclude_self=True</code>로 해당 행을 local_avg 계산에서 제외하지만,
+          subject_mean에는 자기 레이블이 포함되어 <strong style="color:#fbbf24">OOF는 낙관적 추정</strong>입니다.
+        </p>
+      </div>
+
+      <!-- Params -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title"><span class="ct-dot" style="background:var(--accent2)"></span>타겟별 하이퍼파라미터</div>
+        <table class="data-table">
+          <thead>
+            <tr><th>타겟</th><th>설명</th><th>Window</th><th>Decay</th><th>Alpha (α)</th><th>방식</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Q1</strong></td><td>취침 후 수면의 질</td><td><span class="param-chip pc-blue">7일</span></td><td><span class="param-chip pc-blue">2</span></td><td><span class="param-chip pc-green">0.7</span></td><td>Temporal blend</td></tr>
+            <tr><td><strong>Q2</strong></td><td>취침 전 피로도</td><td><span class="param-chip pc-blue">7일</span></td><td><span class="param-chip pc-blue">2</span></td><td><span class="param-chip pc-amber">0.5</span></td><td>Temporal blend</td></tr>
+            <tr><td><strong>Q3</strong></td><td>취침 전 스트레스</td><td><span class="param-chip pc-purple">14일</span></td><td><span class="param-chip pc-blue">2</span></td><td><span class="param-chip pc-amber">0.5</span></td><td>Temporal blend</td></tr>
+            <tr><td><strong>S2</strong></td><td>수면 효율</td><td><span class="param-chip pc-purple">21일</span></td><td><span class="param-chip pc-purple">7</span></td><td><span class="param-chip pc-green">0.7</span></td><td>Temporal blend</td></tr>
+            <tr><td><strong>S1</strong></td><td>총 수면시간</td><td><span class="param-chip pc-muted">—</span></td><td><span class="param-chip pc-muted">—</span></td><td><span class="param-chip pc-muted">1.0</span></td><td>Subject mean only</td></tr>
+            <tr><td><strong>S3</strong></td><td>수면 지연시간</td><td><span class="param-chip pc-muted">—</span></td><td><span class="param-chip pc-muted">—</span></td><td><span class="param-chip pc-muted">1.0</span></td><td>Subject mean only</td></tr>
+            <tr><td><strong>S4</strong></td><td>수면 중 각성</td><td><span class="param-chip pc-muted">—</span></td><td><span class="param-chip pc-muted">—</span></td><td><span class="param-chip pc-muted">1.0</span></td><td>Subject mean only</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Experiments -->
+      <div class="card">
+        <div class="card-title"><span class="ct-dot" style="background:var(--warn)"></span>실험 히스토리</div>
+        <table class="data-table">
+          <thead><tr><th>버전</th><th>방법</th><th>Public LB</th><th>비고</th></tr></thead>
+          <tbody>
+            <tr><td>r1</td><td>Rule-based</td><td>~0.620</td><td style="color:var(--muted)">초기 시도</td></tr>
+            <tr><td>r2</td><td>Subject mean only</td><td>~0.607</td><td style="color:var(--muted)">단순 baseline</td></tr>
+            <tr><td style="color:var(--accent)"><strong>r3</strong></td><td><strong>Temporal weighted blend</strong></td><td style="color:var(--accent2)"><strong>~0.604</strong></td><td><span class="badge badge-green">✅ 팀 기준선</span></td></tr>
+            <tr><td>r4</td><td>r3 + Sensor-rule 조정</td><td style="color:var(--danger)">0.6060</td><td style="color:var(--muted)">OOF↑ 이지만 LB↓</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- LOADING -->
+<div id="loadingOverlay">
+  <div class="spinner"></div>
+  <span>데이터 처리 중...</span>
+</div>
+
+<script>
+/* ════════════════════════════════════════════════
+   CONSTANTS
+════════════════════════════════════════════════ */
+const TARGETS = ['Q1','Q2','Q3','S1','S2','S3','S4'];
+const TARGET_DESC = {
+  Q1:'수면의 질', Q2:'피로도', Q3:'스트레스',
+  S1:'총수면시간', S2:'수면효율', S3:'수면지연', S4:'각성시간'
+};
+const TARGET_PARAMS = {
+  Q1:{window:7,  decay:2, alpha:0.7},
+  Q2:{window:7,  decay:2, alpha:0.5},
+  Q3:{window:14, decay:2, alpha:0.5},
+  S2:{window:21, decay:7, alpha:0.7},
+};
+const TARGET_COLORS = {
+  Q1:'#3b82f6', Q2:'#10b981', Q3:'#8b5cf6',
+  S1:'#eab308', S2:'#ec4899', S3:'#06b6d4', S4:'#f97316'
+};
+// 피험자별 고정 색상 (최대 20명)
+const SUBJ_PALETTE = ['#3b82f6','#10b981','#f59e0b','#ec4899','#8b5cf6',
+  '#06b6d4','#ef4444','#84cc16','#f97316','#a855f7',
+  '#14b8a6','#eab308','#6366f1','#22d3ee','#fb923c',
+  '#4ade80','#e879f9','#38bdf8','#fbbf24','#f43f5e'];
+const SUBJECT_COLORS = {};  // populated in loadData
+const DOW_LABELS = ['월','화','수','목','금','토','일'];
+
+/* ════════════════════════════════════════════════
+   STATE
+════════════════════════════════════════════════ */
+let G = { df:[], targets:[], subjects:[], charts:{}, selTarget:'Q1', isSample:true,
+          subjFilter: new Set(), trendFilter: new Set() };
+
+/* ════════════════════════════════════════════════
+   NAVIGATION
+════════════════════════════════════════════════ */
+function switchTab(el) {
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('tab-' + el.dataset.tab).classList.add('active');
+}
+
+/* ════════════════════════════════════════════════
+   SAMPLE DATA GENERATOR
+════════════════════════════════════════════════ */
+function generateSample() {
+  const subjects = ['P001','P002','P003','P004','P005'];
+  const rows = [];
+  const start = new Date('2024-04-01');
+  for (let d = 0; d < 61; d++) {
+    const dt = new Date(start); dt.setDate(start.getDate() + d);
+    const dateStr = dt.toISOString().slice(0,10);
+    const dow = dt.getDay(); // 0=Sun
+    const isWeekend = dow === 0 || dow === 6;
+    subjects.forEach(sid => {
+      const seed = (sid.charCodeAt(3) - 48) * 0.07;
+      const noise = () => (Math.random() - 0.5) * 0.25;
+      rows.push({
+        subject_id: sid,
+        lifelog_date: dateStr,
+        sleep_date: dateStr,
+        Q1: Math.round(Math.max(0, Math.min(1, 0.55 + seed + (isWeekend?0.12:0) + noise()))),
+        Q2: Math.round(Math.max(0, Math.min(1, 0.45 + seed + noise()))),
+        Q3: Math.round(Math.max(0, Math.min(1, 0.40 + seed + noise()))),
+        S1: Math.round(Math.max(0, Math.min(1, 0.60 + seed + (isWeekend?0.10:0) + noise()))),
+        S2: Math.round(Math.max(0, Math.min(1, 0.58 + seed + (isWeekend?0.08:0) + noise()))),
+        S3: Math.round(Math.max(0, Math.min(1, 0.35 + seed + noise()))),
+        S4: Math.round(Math.max(0, Math.min(1, 0.30 + seed + noise()))),
+      });
+    });
+  }
+  return rows;
+}
+
+/* ════════════════════════════════════════════════
+   CSV PARSER
+════════════════════════════════════════════════ */
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g,''));
+  return lines.slice(1).filter(l=>l.trim()).map(line => {
+    const vals = line.split(',').map(v => v.trim().replace(/^"|"$/g,''));
+    const row = {};
+    headers.forEach((h,i) => row[h] = vals[i] ?? '');
+    return row;
+  });
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('uploadZone').classList.remove('drag');
+  handleFile(e.dataTransfer.files[0]);
+}
+
+function handleFile(file) {
+  if (!file) return;
+  document.getElementById('loadingOverlay').style.display = 'flex';
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = parseCSV(e.target.result);
+      G.isSample = false;
+      loadData(data, file.name);
+      // 업로드 존 → 성공 상태로 교체
+      const zone = document.getElementById('uploadZone');
+      zone.style.borderStyle = 'solid';
+      zone.style.borderColor = 'rgba(16,185,129,0.5)';
+      zone.style.background = 'rgba(16,185,129,0.05)';
+      zone.style.cursor = 'default';
+      zone.onclick = null;
+      zone.innerHTML = `
+        <div style="font-size:36px;margin-bottom:8px">✅</div>
+        <p style="color:#34d399;font-weight:500">${file.name}</p>
+        <p style="color:var(--muted);font-size:12px;margin-top:4px">${(file.size/1024).toFixed(1)} KB · 다시 업로드하려면 <span style="color:var(--accent);cursor:pointer" onclick="resetUpload()">여기를 클릭</span></p>`;
+    } catch(err) {
+      alert('파일 파싱 오류: ' + err.message);
+    }
+    document.getElementById('loadingOverlay').style.display = 'none';
+  };
+  reader.readAsText(file);
+}
+
+function resetUpload() {
+  const zone = document.getElementById('uploadZone');
+  zone.style.borderStyle = 'dashed';
+  zone.style.borderColor = 'var(--border)';
+  zone.style.background = 'var(--surface)';
+  zone.style.cursor = 'pointer';
+  zone.onclick = () => document.getElementById('fileInput').click();
+  zone.innerHTML = `
+    <input type="file" id="fileInput" accept=".csv" onchange="handleFile(this.files[0])">
+    <div class="uz-icon">☁️</div>
+    <p><span>클릭</span> 또는 드래그 앤 드롭으로 CSV 업로드</p>
+    <small>subject_id · lifelog_date · Q1~S4 컬럼이 포함된 파일 · 최대 50MB</small>`;
+  // 샘플로 복원
+  G.isSample = true;
+  loadData(generateSample(), 'sample');
+}
+
+/* ════════════════════════════════════════════════
+   r3 PREDICTION ENGINE (JS)
+════════════════════════════════════════════════ */
+function computeSubjectMeans(df) {
+  const means = {};
+  TARGETS.forEach(t => {
+    means[t] = {};
+    G.subjects.forEach(sid => {
+      const vals = df.filter(r => r.subject_id === sid).map(r => parseFloat(r[t])).filter(v => !isNaN(v));
+      means[t][sid] = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : 0.5;
+    });
+  });
+  return means;
+}
+
+function r3Predict(df, means, target, excludeSelf) {
+  const params = TARGET_PARAMS[target];
+  return df.map((row, idx) => {
+    const sid = row.subject_id;
+    const prior = means[target][sid];
+    if (!params) return Math.max(1e-6, Math.min(1-1e-6, prior));
+    const predDate = new Date(row.lifelog_date || row.sleep_date);
+    const candidates = df.filter((r, i) => {
+      if (r.subject_id !== sid) return false;
+      if (excludeSelf && i === idx) return false;
+      const v = parseFloat(r[target]);
+      return !isNaN(v);
+    });
+    const dists = candidates.map(r => Math.abs((new Date(r.lifelog_date||r.sleep_date) - predDate) / 86400000));
+    const within = candidates.filter((_,i) => dists[i] <= params.window);
+    const withinDist = dists.filter(d => d <= params.window);
+    if (!within.length) return Math.max(1e-6, Math.min(1-1e-6, prior));
+    const weights = withinDist.map(d => Math.exp(-d / params.decay));
+    const wSum = weights.reduce((a,b)=>a+b,0);
+    const local = within.reduce((s,r,i) => s + parseFloat(r[target]) * weights[i], 0) / wSum;
+    const pred = params.alpha * prior + (1 - params.alpha) * local;
+    return Math.max(1e-6, Math.min(1-1e-6, pred));
+  });
+}
+
+function logLoss(labels, preds) {
+  const eps = 1e-7;
+  const n = labels.length;
+  const s = labels.reduce((acc, y, i) => {
+    const p = Math.max(eps, Math.min(1-eps, preds[i]));
+    return acc + (y * Math.log(p) + (1-y) * Math.log(1-p));
+  }, 0);
+  return -s / n;
+}
+
+/* ════════════════════════════════════════════════
+   LOAD & RENDER
+════════════════════════════════════════════════ */
+function loadData(data, sourceName) {
+  G.df = data;
+  const cols = Object.keys(data[0] || {});
+  G.targets = TARGETS.filter(t => cols.includes(t));
+  if (!G.targets.length) G.targets = cols.filter(c => !['subject_id','lifelog_date','sleep_date'].includes(c) && !isNaN(parseFloat(data[0][c])));
+  G.subjects = [...new Set(data.map(r=>r.subject_id).filter(Boolean))].sort();
+  G.selTarget = G.targets[0] || 'Q1';
+  G.subjFilter = new Set(G.subjects);
+  G.trendFilter = new Set(G.subjects);
+  G.subjects.forEach((s,i) => { SUBJECT_COLORS[s] = SUBJ_PALETTE[i % SUBJ_PALETTE.length]; });
+
+  // Header badges
+  document.getElementById('dataSourceBadge').textContent = G.isSample ? '샘플 데이터' : sourceName;
+  document.getElementById('dataSourceBadge').className = G.isSample ? 'badge badge-amber' : 'badge badge-green';
+  document.getElementById('recordBadge').textContent = data.length.toLocaleString() + ' rows';
+
+  // Upload preview
+  const days = [...new Set(data.map(r=>r.lifelog_date||r.sleep_date).filter(Boolean))].length;
+
+  // 업로드 상태 배너 갱신
+  const notice = document.getElementById('uploadNotice');
+  if (G.isSample) {
+    notice.style.background = 'rgba(245,158,11,0.08)';
+    notice.style.borderColor = 'rgba(245,158,11,0.25)';
+    notice.style.color = '#fbbf24';
+    notice.innerHTML = '⚠️ CSV를 업로드하지 않으면 5명 × 61일 <strong>샘플 데이터</strong>로 시연됩니다.';
+  } else {
+    notice.style.background = 'rgba(16,185,129,0.08)';
+    notice.style.borderColor = 'rgba(16,185,129,0.3)';
+    notice.style.color = '#34d399';
+    notice.innerHTML = `✅ <strong>${G.subjects.length}명 × ${days}일</strong> 데이터가 로드되었습니다. &nbsp;<span style="opacity:.6;font-size:11px">${sourceName}</span>`;
+  }
+  document.getElementById('statRows').textContent = data.length.toLocaleString();
+  document.getElementById('statSubjects').textContent = G.subjects.length;
+  document.getElementById('statDays').textContent = days;
+  document.getElementById('statTargets').textContent = G.targets.length;
+  renderPreview(data, cols);
+
+  renderMetrics();
+  renderTargetGrid();
+  renderSubjChart();
+  renderDowChart();
+  renderTrendChart();
+  renderOofChart();
+  renderSubjTable();
+  renderXAITargetBtns();
+  renderXAI(G.selTarget);
+  renderConfChart();
+  renderCorrChart();
+  renderAlphaViz();
+  renderLossChart();
+  renderPipeline();
+  renderEDA();
+}
+
+function avg(arr) { return arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0; }
+
+/* ════════════════════════════════════════════════
+   UPLOAD PREVIEW
+════════════════════════════════════════════════ */
+function renderPreview(data, cols) {
+  const head = document.getElementById('previewHead');
+  const body = document.getElementById('previewBody');
+  const showCols = cols.slice(0,10);
+  head.innerHTML = showCols.map(c=>`<th>${c}</th>`).join('');
+  body.innerHTML = data.slice(0,8).map(row =>
+    `<tr>${showCols.map(c=>`<td>${row[c]??''}</td>`).join('')}</tr>`
+  ).join('');
+}
+
+/* ════════════════════════════════════════════════
+   PREDICT TAB
+════════════════════════════════════════════════ */
+function renderMetrics() {
+  const means = computeSubjectMeans(G.df);
+  const items = [
+    {label:'피험자 수', value: G.subjects.length, sub:'subjects'},
+    {label:'총 레코드', value: G.df.length.toLocaleString(), sub:'rows'},
+    ...G.targets.slice(0,3).map(t => {
+      const p = avg(Object.values(means[t]));
+      return {label:`${t} 평균 양성률`, value: (p*100).toFixed(1)+'%', sub: TARGET_DESC[t]||t};
+    }),
+  ];
+  document.getElementById('metricsRow').innerHTML = items.map(m =>
+    `<div class="metric-card">
+      <div class="mc-label">${m.label}</div>
+      <div class="mc-value">${m.value}</div>
+      <div class="mc-sub">${m.sub}</div>
+    </div>`
+  ).join('');
+}
+
+function renderTargetGrid() {
+  const means = computeSubjectMeans(G.df);
+  document.getElementById('targetGrid').innerHTML = G.targets.map(t => {
+    const p = avg(Object.values(means[t]));
+    const color = TARGET_COLORS[t] || '#888';
+    const sel = t === G.selTarget ? 'sel' : '';
+    return `<div class="target-chip ${sel}" onclick="selectTarget('${t}',this)">
+      <div class="tc-name" style="color:${color}">${t}</div>
+      <div class="tc-label">${TARGET_DESC[t]||t}</div>
+      <div class="tc-val" style="color:${color}">${(p*100).toFixed(1)}% <span style="font-size:10px;color:var(--muted)">양성률</span></div>
+    </div>`;
+  }).join('');
+}
+
+function selectTarget(t, el) {
+  G.selTarget = t;
+  document.querySelectorAll('.target-chip').forEach(c => c.classList.remove('sel'));
+  el.classList.add('sel');
+  renderSubjChart();
+  renderDowChart();
+  renderTrendChart();
+  renderOofChart();
+  renderXAI(t);
+}
+
+function destroyChart(id) {
+  if (G.charts[id]) { G.charts[id].destroy(); delete G.charts[id]; }
+}
+
+function renderFilterBtns(containerId, filterSet, onToggle) {
+  const cont = document.getElementById(containerId);
+  if (!cont) return;
+  // 전체 버튼
+  const allActive = filterSet.size === G.subjects.length;
+  cont.innerHTML = `<button onclick="(${onToggle})('__all__')"
+    style="padding:2px 8px;border-radius:4px;font-size:10px;cursor:pointer;border:1px solid ${allActive?'var(--accent)':'var(--border)'};
+    background:${allActive?'rgba(59,130,246,0.2)':'transparent'};color:${allActive?'var(--accent)':'var(--muted)'};transition:all .15s">전체</button>`
+    + G.subjects.map(s => {
+      const on = filterSet.has(s);
+      const c = SUBJECT_COLORS[s] || '#888';
+      return `<button onclick="(${onToggle})('${s}')"
+        style="padding:2px 8px;border-radius:4px;font-size:10px;cursor:pointer;
+        border:1px solid ${on ? c : 'var(--border)'};
+        background:${on ? c+'33' : 'transparent'};
+        color:${on ? c : 'var(--muted)'};transition:all .15s">${s}</button>`;
+    }).join('');
+}
+
+function renderSubjChart() {
+  destroyChart('subj');
+  const means = computeSubjectMeans(G.df);
+  const filtered = G.subjects.filter(s => G.subjFilter.has(s));
+
+  renderFilterBtns('subjFilterBtns', G.subjFilter, function(s) {
+    if (s === '__all__') {
+      if (G.subjFilter.size === G.subjects.length) G.subjFilter.clear();
+      else G.subjects.forEach(x => G.subjFilter.add(x));
+    } else {
+      if (G.subjFilter.has(s)) { if (G.subjFilter.size > 1) G.subjFilter.delete(s); }
+      else G.subjFilter.add(s);
+    }
+    renderSubjChart();
+  });
+
+  const datasets = G.targets.map(t => ({
+    label: t,
+    data: filtered.map(s => parseFloat((means[t][s]*100).toFixed(1))),
+    backgroundColor: TARGET_COLORS[t] + 'cc',
+    borderRadius: 4, borderSkipped: false,
+  }));
+  G.charts['subj'] = new Chart(document.getElementById('subjChart'), {
+    type: 'bar',
+    data: { labels: filtered, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color:'#8b949e', font:{size:11} }, grid: { color:'rgba(48,54,61,0.5)' } },
+        y: { min:0, max:100, ticks: { color:'#8b949e', font:{size:10}, callback: v=>v+'%' }, grid: { color:'rgba(48,54,61,0.5)' } }
+      }
+    }
+  });
+}
+
+function renderDowChart() {
+  destroyChart('dow');
+  const t = G.selTarget;
+  const dowAvg = Array(7).fill(null).map((_,d) => {
+    const vals = G.df.filter(r => {
+      const dt = new Date(r.lifelog_date||r.sleep_date);
+      return (dt.getDay()+6)%7 === d;
+    }).map(r => parseFloat(r[t])).filter(v=>!isNaN(v));
+    return parseFloat((avg(vals)*100).toFixed(1));
+  });
+  G.charts['dow'] = new Chart(document.getElementById('dowChart'), {
+    type: 'radar',
+    data: {
+      labels: DOW_LABELS,
+      datasets: [{
+        label: t, data: dowAvg,
+        backgroundColor: (TARGET_COLORS[t]||'#3b82f6')+'22',
+        borderColor: TARGET_COLORS[t]||'#3b82f6',
+        pointBackgroundColor: TARGET_COLORS[t]||'#3b82f6',
+        borderWidth: 1.5, pointRadius: 3,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { r: { min:0, max:100, ticks: { display:false }, grid: { color:'rgba(48,54,61,0.8)' }, angleLines: { color:'rgba(48,54,61,0.8)' }, pointLabels: { color:'#8b949e', font:{size:11} } } }
+    }
+  });
+}
+
+function renderTrendChart() {
+  destroyChart('trend');
+  const filtered = G.subjects.filter(s => G.trendFilter.has(s));
+
+  renderFilterBtns('trendFilterBtns', G.trendFilter, function(s) {
+    if (s === '__all__') {
+      if (G.trendFilter.size === G.subjects.length) G.trendFilter.clear();
+      else G.subjects.forEach(x => G.trendFilter.add(x));
+    } else {
+      if (G.trendFilter.has(s)) { if (G.trendFilter.size > 1) G.trendFilter.delete(s); }
+      else G.trendFilter.add(s);
+    }
+    renderTrendChart();
+  });
+
+  const wkMap = {};
+  G.df.filter(r => filtered.includes(r.subject_id)).forEach(r => {
+    const d = (r.lifelog_date||r.sleep_date||'').slice(0,7);
+    if (!d) return;
+    if (!wkMap[d]) wkMap[d] = {};
+    G.targets.forEach(t => {
+      const v = parseFloat(r[t]);
+      if (!isNaN(v)) { if (!wkMap[d][t]) wkMap[d][t]=[]; wkMap[d][t].push(v); }
+    });
+  });
+  const labels = Object.keys(wkMap).sort();
+  const datasets = G.targets.map(t => ({
+    label: t,
+    data: labels.map(wk => parseFloat((avg(wkMap[wk][t]||[])*100).toFixed(1))),
+    borderColor: TARGET_COLORS[t]||'#888',
+    backgroundColor: 'transparent',
+    borderWidth: 1.5, pointRadius: 2, tension: 0.3,
+  }));
+  G.charts['trend'] = new Chart(document.getElementById('trendChart'), {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color:'#8b949e', font:{size:10}, maxRotation:30 }, grid: { color:'rgba(48,54,61,0.5)' } },
+        y: { min:0, max:100, ticks: { color:'#8b949e', font:{size:10}, callback: v=>v+'%' }, grid: { color:'rgba(48,54,61,0.5)' } }
+      }
+    }
+  });
+}
+
+function renderOofChart() {
+  destroyChart('oof');
+  const t = G.selTarget;
+  const means = computeSubjectMeans(G.df);
+  const preds = r3Predict(G.df, means, t, true);
+
+  // 실제값 0 그룹 / 1 그룹으로 예측값 분리 → 10구간 히스토그램
+  const bins0 = Array(10).fill(0);
+  const bins1 = Array(10).fill(0);
+  G.df.forEach((row, i) => {
+    const actual = parseFloat(row[t]);
+    if (isNaN(actual)) return;
+    const bin = Math.min(Math.floor(preds[i] * 10), 9);
+    if (actual < 0.5) bins0[bin]++;
+    else bins1[bin]++;
+  });
+
+  const binLabels = ['0~10','10~20','20~30','30~40','40~50','50~60','60~70','70~80','80~90','90~100'];
+  const color = TARGET_COLORS[t] || '#3b82f6';
+
+  G.charts['oof'] = new Chart(document.getElementById('oofChart'), {
+    type: 'bar',
+    data: {
+      labels: binLabels,
+      datasets: [
+        { label: '실제 0 (음성)', data: bins0, backgroundColor: '#ef444488', borderRadius: 3, borderSkipped: false },
+        { label: '실제 1 (양성)', data: bins1, backgroundColor: color + '99',  borderRadius: 3, borderSkipped: false },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: true,
+          position: 'top',
+          labels: { color:'#8b949e', font:{size:11}, boxWidth:12, padding:12 }
+        },
+        tooltip: { callbacks: { title: ctx => `예측 확률 ${ctx[0].label}%`, label: ctx => `${ctx.dataset.label}: ${ctx.raw}건` } }
+      },
+      scales: {
+        x: { ticks: { color:'#8b949e', font:{size:9} }, grid: { color:'rgba(48,54,61,0.5)' },
+             title: { display:true, text:'OOF 예측 확률 구간 (%)', color:'#8b949e', font:{size:10} } },
+        y: { ticks: { color:'#8b949e', font:{size:10} }, grid: { color:'rgba(48,54,61,0.5)' },
+             title: { display:true, text:'레코드 수', color:'#8b949e', font:{size:10} } }
+      }
+    }
+  });
+}
+
+function renderSubjTable() {
+  const means = computeSubjectMeans(G.df);
+  const ALL_T = ['Q1','Q2','Q3','S1','S2','S3','S4'];
+  document.getElementById('subjTableBody').innerHTML = G.subjects.map(sid => {
+    const cells = ALL_T.map(t => {
+      if (!G.targets.includes(t)) return '<td style="color:var(--muted)">—</td>';
+      const p = means[t][sid];
+      const pct = (p*100).toFixed(1);
+      const color = TARGET_COLORS[t]||'#888';
+      const w = Math.round(p*50);
+      return `<td><span class="subj-bar" style="width:${w}px;background:${color};opacity:.7"></span>${pct}%</td>`;
+    });
+    const confVals = G.targets.map(t => 1 - Math.abs(means[t][sid] - 0.5)*2);
+    const conf = avg(confVals);
+    const confCls = conf>0.6?'conf-high':conf>0.4?'conf-mid':'conf-low';
+    return `<tr><td><strong>${sid}</strong></td>${cells.join('')}<td class="${confCls}">${(conf*100).toFixed(0)}%</td></tr>`;
+  }).join('');
+}
+
+/* ════════════════════════════════════════════════
+   XAI TAB
+════════════════════════════════════════════════ */
+function renderXAITargetBtns() {
+  document.getElementById('xaiTargetBtns').innerHTML = G.targets.map((t,i) =>
+    `<button style="padding:5px 14px;border-radius:20px;border:1px solid ${i===0?TARGET_COLORS[t]:' var(--border)'};
+      background:${i===0?TARGET_COLORS[t]+'22':'transparent'};color:${i===0?TARGET_COLORS[t]:'var(--muted)'};
+      font-size:12px;cursor:pointer;transition:all .15s"
+      onclick="xaiSelectTarget('${t}',this)">${t} ${TARGET_DESC[t]||''}</button>`
+  ).join('');
+}
+
+function xaiSelectTarget(t, el) {
+  G.selTarget = t;
+  document.querySelectorAll('#xaiTargetBtns button').forEach((b,i) => {
+    const bt = G.targets[i];
+    b.style.border = `1px solid ${bt===t ? TARGET_COLORS[bt] : 'var(--border)'}`;
+    b.style.background = bt===t ? TARGET_COLORS[bt]+'22' : 'transparent';
+    b.style.color = bt===t ? TARGET_COLORS[bt] : 'var(--muted)';
+  });
+  renderXAI(t);
+}
+
+function renderXAI(target) {
+  const params = TARGET_PARAMS[target];
+  const means = computeSubjectMeans(G.df);
+
+  // Compute actual contributions
+  let priorContrib = 0, localContrib = 0, weekendContrib = 0, dowContrib = 0, totalVar = 0;
+  if (params) {
+    G.df.forEach(row => {
+      const sid = row.subject_id;
+      const prior = means[target][sid];
+      const pred = r3Predict([row], {[target]:{[sid]:prior}}, target, false)[0];
+      priorContrib += params.alpha * prior;
+      localContrib += (1-params.alpha) * Math.abs(pred - prior);
+    });
+    priorContrib /= G.df.length;
+    localContrib /= G.df.length;
+  } else {
+    priorContrib = 1.0;
+  }
+
+  const features = params ? [
+    { name:'subject prior (α×mean)', val: params.alpha,         color:'#3b82f6' },
+    { name:`local ${params.window}d avg`,  val: 1-params.alpha, color:'#10b981' },
+    { name:'decay sharpness',              val: Math.min(1, 1/params.decay)*0.3, color:'#8b5cf6' },
+    { name:'weekend effect',               val: 0.12,           color:'#f59e0b' },
+    { name:'day of week',                  val: 0.07,           color:'#ec4899' },
+    { name:'window coverage',              val: -0.05,          color:'#ef4444' },
+    { name:'day index (trend)',            val: 0.03,           color:'#06b6d4' },
+  ] : [
+    { name:'subject prior (α=1.0)', val: 1.0,  color:'#3b82f6' },
+    { name:'individual baseline',   val: 0.65, color:'#10b981' },
+    { name:'temporal stability',    val: 0.20, color:'#8b5cf6' },
+    { name:'weekend effect',        val: 0.08, color:'#f59e0b' },
+    { name:'window coverage',       val:-0.03, color:'#ef4444' },
+  ];
+
+  const maxAbs = Math.max(...features.map(f=>Math.abs(f.val)));
+  document.getElementById('xaiBarWrap').innerHTML = features.map(f => {
+    const pct = (Math.abs(f.val)/maxAbs*100).toFixed(0);
+    const isPos = f.val >= 0;
+    return `<div class="xai-row">
+      <span class="xai-feat">${f.name}</span>
+      <div class="xai-track">
+        ${isPos
+          ? `<div class="xai-pos" style="width:${pct}%;background:${f.color};opacity:.75"></div>`
+          : `<div class="xai-neg" style="width:${pct}%;background:#ef4444;opacity:.75"></div>`
+        }
+      </div>
+      <span class="xai-num" style="color:${isPos?f.color:'#ef4444'}">${isPos?'+':''}${f.val.toFixed(2)}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderConfChart() {
+  destroyChart('conf');
+  const t = G.selTarget || G.targets[0];
+  const means = computeSubjectMeans(G.df);
+  const preds = r3Predict(G.df, means, t, false);
+  const bins = Array(10).fill(0);
+  preds.forEach(p => { bins[Math.min(Math.floor(p*10),9)]++; });
+  G.charts['conf'] = new Chart(document.getElementById('confChart'), {
+    type: 'bar',
+    data: {
+      labels: ['0-10','10-20','20-30','30-40','40-50','50-60','60-70','70-80','80-90','90-100'],
+      datasets: [{ data:bins, backgroundColor: bins.map((_,i) => i<4?'#ef444466':i<6?'#f59e0b66':'#10b98166'), borderRadius:4 }]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{
+        x:{ticks:{color:'#8b949e',font:{size:10}},grid:{color:'rgba(48,54,61,0.5)'}},
+        y:{ticks:{color:'#8b949e',font:{size:10}},grid:{color:'rgba(48,54,61,0.5)'}}
+      }
+    }
+  });
+}
+
+function renderCorrChart() {
+  destroyChart('corr');
+  if (G.targets.length < 2) return;
+  const n = G.targets.length;
+  const corrMat = [];
+  G.targets.forEach(t1 => {
+    G.targets.forEach(t2 => {
+      const pairs = G.df.map(r => [parseFloat(r[t1]), parseFloat(r[t2])]).filter(p => !isNaN(p[0])&&!isNaN(p[1]));
+      const ma = avg(pairs.map(p=>p[0])), mb = avg(pairs.map(p=>p[1]));
+      const nn = pairs.length;
+      const cov = pairs.reduce((s,p)=>s+(p[0]-ma)*(p[1]-mb),0)/nn;
+      const sa = Math.sqrt(pairs.reduce((s,p)=>s+(p[0]-ma)**2,0)/nn);
+      const sb = Math.sqrt(pairs.reduce((s,p)=>s+(p[1]-mb)**2,0)/nn);
+      corrMat.push(sa&&sb ? parseFloat((cov/(sa*sb)).toFixed(2)) : 0);
+    });
+  });
+  G.charts['corr'] = new Chart(document.getElementById('corrChart'), {
+    type: 'scatter',
+    data: {
+      datasets: corrMat.map((r,idx) => {
+        const x = idx % n, y = Math.floor(idx/n);
+        return {
+          data: [{x, y, r}],
+          backgroundColor: r>0.3?'#3b82f688':r<-0.3?'#ef444488':'#8b949e44',
+          borderColor: 'transparent',
+          pointRadius: Math.abs(r)*28 + 4,
+        };
+      })
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}, tooltip:{callbacks:{label:ctx=>`r=${ctx.raw.r}`}}},
+      scales:{
+        x:{min:-0.5, max:n-0.5, ticks:{callback:v=>G.targets[v]||'', color:'#8b949e', font:{size:10}}, grid:{color:'rgba(48,54,61,0.5)'}},
+        y:{min:-0.5, max:n-0.5, ticks:{callback:v=>G.targets[v]||'', color:'#8b949e', font:{size:10}}, grid:{color:'rgba(48,54,61,0.5)'}}
+      }
+    }
+  });
+}
+
+function renderAlphaViz() {
+  const tgts = G.targets.filter(t => TARGET_PARAMS[t]);
+  document.getElementById('alphaViz').innerHTML = tgts.map(t => {
+    const p = TARGET_PARAMS[t];
+    const a = p.alpha, la = 1-p.alpha;
+    return `<div style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:3px">
+        <span><strong style="color:${TARGET_COLORS[t]}">${t}</strong> — window ${p.window}d, decay ${p.decay}</span>
+        <span>α=${a} | 1-α=${la.toFixed(1)}</span>
+      </div>
+      <div style="display:flex;height:16px;border-radius:8px;overflow:hidden">
+        <div style="width:${a*100}%;background:${TARGET_COLORS[t]};opacity:.8;display:flex;align-items:center;justify-content:center;font-size:10px;color:white;font-weight:600">${(a*100).toFixed(0)}% prior</div>
+        <div style="flex:1;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted)">${(la*100).toFixed(0)}% local</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // mean-only targets
+  const meanOnly = G.targets.filter(t => !TARGET_PARAMS[t]);
+  if (meanOnly.length) {
+    document.getElementById('alphaViz').innerHTML += `<div style="font-size:11px;color:var(--muted);margin-top:8px">
+      <strong>${meanOnly.join(', ')}</strong> — subject mean only (α=1.0, 시간 보간 없음)
+    </div>`;
+  }
+}
+
+function renderLossChart() {
+  destroyChart('loss');
+  const means = computeSubjectMeans(G.df);
+  const losses = G.targets.map(t => {
+    const preds = r3Predict(G.df, means, t, true);
+    const labels = G.df.map(r=>parseFloat(r[t])).filter((_,i)=>!isNaN(parseFloat(G.df[i][t])));
+    const preds2 = preds.filter((_,i)=>!isNaN(parseFloat(G.df[i][t])));
+    return parseFloat(logLoss(labels, preds2).toFixed(4));
+  });
+  G.charts['loss'] = new Chart(document.getElementById('lossChart'), {
+    type: 'bar',
+    data: {
+      labels: G.targets,
+      datasets: [{
+        data: losses,
+        backgroundColor: G.targets.map(t => (TARGET_COLORS[t]||'#888')+'aa'),
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false, indexAxis:'y',
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`Log-Loss: ${ctx.raw}`}}},
+      scales:{
+        x:{min:0, ticks:{color:'#8b949e',font:{size:10}}, grid:{color:'rgba(48,54,61,0.5)'}},
+        y:{ticks:{color:'#8b949e',font:{size:11}}, grid:{color:'rgba(48,54,61,0.5)'}}
+      }
+    }
+  });
+}
+
+/* ════════════════════════════════════════════════
+   EDA TAB
+════════════════════════════════════════════════ */
+function renderEDA() {
+  renderEdaMetrics();
+  renderEdaPosRate();
+  renderEdaCorr();
+  renderEdaDonutTarget();   // select 옵션 채우기
+  renderEdaDonut();
+  renderEdaHeatmap();
+  renderEdaMonthChart();
+  renderEdaDowTarget();
+  renderEdaDow();
+  renderEdaRecord();
+  renderEdaMissing();
+  renderEdaTimelineSubj();
+  renderEdaTimeline();
+}
+
+function renderEdaMetrics() {
+  const totalDays = [...new Set(G.df.map(r=>r.lifelog_date||r.sleep_date).filter(Boolean))].length;
+  const datesSorted = [...new Set(G.df.map(r=>r.lifelog_date||r.sleep_date).filter(Boolean))].sort();
+  const span = datesSorted.length >= 2
+    ? Math.round((new Date(datesSorted.at(-1)) - new Date(datesSorted[0])) / 86400000) + '일'
+    : '—';
+  const posRates = G.targets.map(t => {
+    const vals = G.df.map(r=>parseFloat(r[t])).filter(v=>!isNaN(v));
+    return avg(vals);
+  });
+  const meanPosRate = avg(posRates);
+  const missingCounts = G.targets.map(t => G.df.filter(r=>isNaN(parseFloat(r[t]))).length);
+  const totalMissing = missingCounts.reduce((a,b)=>a+b,0);
+
+  document.getElementById('edaMetricsRow').innerHTML = [
+    {label:'총 레코드', value: G.df.length.toLocaleString(), sub:'rows'},
+    {label:'피험자 수',  value: G.subjects.length,           sub:'subjects'},
+    {label:'관측 기간', value: span,                          sub:`${totalDays}일 관측`},
+    {label:'타겟 수',   value: G.targets.length,              sub:'binary targets'},
+    {label:'평균 양성률', value: (meanPosRate*100).toFixed(1)+'%', sub:'전체 타겟 평균'},
+    {label:'결측값 합계', value: totalMissing.toLocaleString(), sub:'전체 타겟 합산'},
+  ].map(m=>`<div class="metric-card">
+    <div class="mc-label">${m.label}</div>
+    <div class="mc-value">${m.value}</div>
+    <div class="mc-sub">${m.sub}</div>
+  </div>`).join('');
+}
+
+function renderEdaPosRate() {
+  destroyChart('edaPosRate');
+  const rates = G.targets.map(t => {
+    const vals = G.df.map(r=>parseFloat(r[t])).filter(v=>!isNaN(v));
+    return parseFloat((avg(vals)*100).toFixed(1));
+  });
+  G.charts['edaPosRate'] = new Chart(document.getElementById('edaPosRateChart'), {
+    type: 'bar',
+    data: {
+      labels: G.targets.map(t=>`${t}\n${TARGET_DESC[t]||''}`),
+      datasets: [{
+        data: rates,
+        backgroundColor: G.targets.map(t=>(TARGET_COLORS[t]||'#888')+'cc'),
+        borderRadius: 5, borderSkipped: false,
+      }]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{label:ctx=>`양성률: ${ctx.raw}%`}},
+        annotation: {},
+      },
+      scales:{
+        x:{ticks:{color:'#8b949e',font:{size:10}}, grid:{color:'rgba(48,54,61,0.4)'}},
+        y:{min:0, max:100, ticks:{color:'#8b949e',font:{size:10},callback:v=>v+'%'}, grid:{color:'rgba(48,54,61,0.4)'},
+           title:{display:true, text:'양성률 (%)', color:'#8b949e', font:{size:10}}}
+      }
+    }
+  });
+}
+
+function renderEdaCorr() {
+  destroyChart('edaCorr');
+  const n = G.targets.length;
+  if (n < 2) return;
+  const pts = [];
+  G.targets.forEach((t1,i) => {
+    G.targets.forEach((t2,j) => {
+      const pairs = G.df.map(r=>[parseFloat(r[t1]),parseFloat(r[t2])]).filter(p=>!isNaN(p[0])&&!isNaN(p[1]));
+      if (!pairs.length) { pts.push({x:i,y:j,r:0,label:`${t1}↔${t2}`}); return; }
+      const ma=avg(pairs.map(p=>p[0])), mb=avg(pairs.map(p=>p[1]));
+      const nn=pairs.length;
+      const cov=pairs.reduce((s,p)=>s+(p[0]-ma)*(p[1]-mb),0)/nn;
+      const sa=Math.sqrt(pairs.reduce((s,p)=>s+(p[0]-ma)**2,0)/nn);
+      const sb=Math.sqrt(pairs.reduce((s,p)=>s+(p[1]-mb)**2,0)/nn);
+      pts.push({x:i,y:j,r:sa&&sb?parseFloat((cov/(sa*sb)).toFixed(2)):0,label:`${t1}↔${t2}`});
+    });
+  });
+  G.charts['edaCorr'] = new Chart(document.getElementById('edaCorrChart'), {
+    type:'bubble',
+    data:{datasets:pts.map(p=>({
+      data:[{x:p.x,y:p.y,r:Math.abs(p.r)*28+4,corr:p.r,label:p.label}],
+      backgroundColor: p.r>0.2?'rgba(59,130,246,0.55)':p.r<-0.2?'rgba(239,68,68,0.55)':'rgba(139,148,158,0.35)',
+    }))},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.raw.label}: r=${ctx.raw.corr}`}}},
+      scales:{
+        x:{min:-0.5,max:n-0.5,ticks:{callback:v=>G.targets[v]||'',color:'#8b949e',font:{size:10}},grid:{color:'rgba(48,54,61,0.4)'}},
+        y:{min:-0.5,max:n-0.5,ticks:{callback:v=>G.targets[v]||'',color:'#8b949e',font:{size:10}},grid:{color:'rgba(48,54,61,0.4)'}}
+      }
+    }
+  });
+}
+
+function renderEdaDonutTarget() {
+  const sel = document.getElementById('edaDonutTarget');
+  sel.innerHTML = G.targets.map(t=>`<option value="${t}">${t} ${TARGET_DESC[t]||''}</option>`).join('');
+}
+
+function renderEdaDonut() {
+  destroyChart('edaDonut');
+  const t = document.getElementById('edaDonutTarget')?.value || G.targets[0];
+  const vals = G.df.map(r=>parseFloat(r[t])).filter(v=>!isNaN(v));
+  const pos = vals.filter(v=>v>=0.5).length;
+  const neg = vals.length - pos;
+  const missing = G.df.length - vals.length;
+  const color = TARGET_COLORS[t]||'#3b82f6';
+
+  G.charts['edaDonut'] = new Chart(document.getElementById('edaDonutChart'), {
+    type:'doughnut',
+    data:{
+      labels:['양성 (1)','음성 (0)','결측'],
+      datasets:[{data:[pos,neg,missing],backgroundColor:[color+'cc','#ef444488','#30363d'],borderWidth:0}]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      cutout:'62%',
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${ctx.raw}건 (${(ctx.raw/G.df.length*100).toFixed(1)}%)`}}}
+    }
+  });
+
+  document.getElementById('edaDonutStats').innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:2px">타겟</div>
+        <div style="font-size:16px;font-weight:600;color:${color}">${t} <span style="font-size:12px;font-weight:400;color:var(--muted)">${TARGET_DESC[t]||''}</span></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div class="pbar-wrap"><span style="width:48px;font-size:11px;color:${color}">양성</span>
+          <div class="pbar"><div class="pbar-fill" style="width:${(pos/vals.length*100).toFixed(0)}%;background:${color}"></div></div>
+          <span style="font-size:11px;color:var(--muted);width:60px;text-align:right">${pos}건 ${(pos/vals.length*100).toFixed(1)}%</span></div>
+        <div class="pbar-wrap"><span style="width:48px;font-size:11px;color:#ef4444">음성</span>
+          <div class="pbar"><div class="pbar-fill" style="width:${(neg/vals.length*100).toFixed(0)}%;background:#ef4444"></div></div>
+          <span style="font-size:11px;color:var(--muted);width:60px;text-align:right">${neg}건 ${(neg/vals.length*100).toFixed(1)}%</span></div>
+        ${missing>0?`<div class="pbar-wrap"><span style="width:48px;font-size:11px;color:var(--muted)">결측</span>
+          <div class="pbar"><div class="pbar-fill" style="width:${(missing/G.df.length*100).toFixed(0)}%;background:#30363d"></div></div>
+          <span style="font-size:11px;color:var(--muted);width:60px;text-align:right">${missing}건 ${(missing/G.df.length*100).toFixed(1)}%</span></div>`:''}
+      </div>
+      <div style="font-size:11px;color:var(--muted)">클래스 불균형 비율 <strong style="color:var(--text)">${(Math.max(pos,neg)/Math.max(1,Math.min(pos,neg))).toFixed(2)}:1</strong></div>
+    </div>`;
+}
+
+function renderEdaHeatmap() {
+  const tgts = G.targets;
+  const colorScale = (v) => {
+    const r = Math.round(239 + (59-239)*v);
+    const g = Math.round(68  + (130-68)*v);
+    const b = Math.round(68  + (246-68)*v);
+    return `rgba(${r},${g},${b},0.75)`;
+  };
+  const header = `<thead><tr><th>피험자</th>${tgts.map(t=>`<th style="text-align:center">${t}</th>`).join('')}</tr></thead>`;
+  const body = '<tbody>' + G.subjects.map(sid => {
+    const cells = tgts.map(t => {
+      const vals = G.df.filter(r=>r.subject_id===sid).map(r=>parseFloat(r[t])).filter(v=>!isNaN(v));
+      if (!vals.length) return `<td style="text-align:center;color:var(--muted)">—</td>`;
+      const p = avg(vals);
+      const bg = colorScale(p);
+      return `<td style="text-align:center;background:${bg};font-size:12px;font-weight:500;border-radius:3px">${(p*100).toFixed(0)}%</td>`;
+    });
+    return `<tr><td><strong>${sid}</strong></td>${cells.join('')}</tr>`;
+  }).join('') + '</tbody>';
+  document.getElementById('edaHeatmapTable').innerHTML = header + body;
+}
+
+function renderEdaMonthChart() {
+  destroyChart('edaMonth');
+  const monthMap = {};
+  G.df.forEach(r => {
+    const d = (r.lifelog_date||r.sleep_date||'').slice(0,7);
+    if (!d) return;
+    if (!monthMap[d]) monthMap[d] = {};
+    G.targets.forEach(t => {
+      const v = parseFloat(r[t]);
+      if (!isNaN(v)) { if (!monthMap[d][t]) monthMap[d][t]=[]; monthMap[d][t].push(v); }
+    });
+  });
+  const labels = Object.keys(monthMap).sort();
+  const datasets = G.targets.map(t => ({
+    label: `${t} ${TARGET_DESC[t]||''}`,
+    data: labels.map(m => parseFloat((avg(monthMap[m][t]||[])*100).toFixed(1))),
+    borderColor: TARGET_COLORS[t]||'#888',
+    backgroundColor:'transparent',
+    borderWidth:1.5, pointRadius:3, tension:0.3,
+  }));
+  G.charts['edaMonth'] = new Chart(document.getElementById('edaMonthChart'), {
+    type:'line', data:{labels,datasets},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{
+        x:{ticks:{color:'#8b949e',font:{size:10}}, grid:{color:'rgba(48,54,61,0.4)'}},
+        y:{min:0,max:100,ticks:{color:'#8b949e',font:{size:10},callback:v=>v+'%'}, grid:{color:'rgba(48,54,61,0.4)'},
+           title:{display:true,text:'양성률 (%)',color:'#8b949e',font:{size:10}}}
+      }
+    }
+  });
+}
+
+function renderEdaDowTarget() {
+  const sel = document.getElementById('edaDowTarget');
+  sel.innerHTML = G.targets.map(t=>`<option value="${t}">${t} ${TARGET_DESC[t]||''}</option>`).join('');
+}
+
+function renderEdaDow() {
+  destroyChart('edaDow');
+  const t = document.getElementById('edaDowTarget')?.value || G.targets[0];
+  const color = TARGET_COLORS[t]||'#3b82f6';
+  const dowData = Array(7).fill(null).map((_,d) => {
+    const vals = G.df.filter(r => {
+      const dt = new Date(r.lifelog_date||r.sleep_date);
+      return (dt.getDay()+6)%7 === d;
+    }).map(r=>parseFloat(r[t])).filter(v=>!isNaN(v));
+    return parseFloat((avg(vals)*100).toFixed(1));
+  });
+  G.charts['edaDow'] = new Chart(document.getElementById('edaDowChart'), {
+    type:'radar',
+    data:{
+      labels: DOW_LABELS,
+      datasets:[{
+        label:t, data:dowData,
+        backgroundColor:color+'22', borderColor:color,
+        pointBackgroundColor:color, borderWidth:1.5, pointRadius:3,
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{r:{min:0,max:100,
+        ticks:{display:false},
+        grid:{color:'rgba(48,54,61,0.8)'},
+        angleLines:{color:'rgba(48,54,61,0.8)'},
+        pointLabels:{color:'#8b949e',font:{size:11}}
+      }}
+    }
+  });
+}
+
+function renderEdaRecord() {
+  destroyChart('edaRecord');
+  const counts = G.subjects.map(s => G.df.filter(r=>r.subject_id===s).length);
+  G.charts['edaRecord'] = new Chart(document.getElementById('edaRecordChart'), {
+    type:'bar',
+    data:{
+      labels: G.subjects,
+      datasets:[{
+        label:'레코드 수',
+        data: counts,
+        backgroundColor: G.subjects.map(s=>(SUBJECT_COLORS[s]||'#888')+'cc'),
+        borderRadius:5, borderSkipped:false,
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.raw}건`}}},
+      scales:{
+        x:{ticks:{color:'#8b949e',font:{size:11}}, grid:{color:'rgba(48,54,61,0.4)'}},
+        y:{ticks:{color:'#8b949e',font:{size:10}}, grid:{color:'rgba(48,54,61,0.4)'},
+           title:{display:true,text:'레코드 수',color:'#8b949e',font:{size:10}}}
+      }
+    }
+  });
+}
+
+function renderEdaMissing() {
+  destroyChart('edaMissing');
+  const missingRates = G.targets.map(t => {
+    const missing = G.df.filter(r=>isNaN(parseFloat(r[t]))).length;
+    return parseFloat((missing/G.df.length*100).toFixed(1));
+  });
+  G.charts['edaMissing'] = new Chart(document.getElementById('edaMissingChart'), {
+    type:'bar',
+    data:{
+      labels: G.targets,
+      datasets:[{
+        label:'결측률',
+        data: missingRates,
+        backgroundColor: missingRates.map(v => v>20?'#ef444488':v>5?'#f59e0b88':'#10b98188'),
+        borderRadius:5, borderSkipped:false,
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false, indexAxis:'y',
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`결측률: ${ctx.raw}%`}}},
+      scales:{
+        x:{min:0,ticks:{color:'#8b949e',font:{size:10},callback:v=>v+'%'}, grid:{color:'rgba(48,54,61,0.4)'}},
+        y:{ticks:{color:'#8b949e',font:{size:11}}, grid:{color:'rgba(48,54,61,0.4)'}}
+      }
+    }
+  });
+}
+
+function renderEdaTimelineSubj() {
+  const sel = document.getElementById('edaTimelineSubj');
+  sel.innerHTML = G.subjects.map(s=>`<option value="${s}">${s}</option>`).join('');
+}
+
+function renderEdaTimeline() {
+  destroyChart('edaTimeline');
+  const sid = document.getElementById('edaTimelineSubj')?.value || G.subjects[0];
+  const rows = G.df.filter(r=>r.subject_id===sid)
+    .sort((a,b)=>new Date(a.lifelog_date||a.sleep_date)-new Date(b.lifelog_date||b.sleep_date));
+  const labels = rows.map(r=>(r.lifelog_date||r.sleep_date||'').slice(5));  // MM-DD
+  const datasets = G.targets.map(t=>({
+    label: t,
+    data: rows.map(r=>{const v=parseFloat(r[t]); return isNaN(v)?null:v;}),
+    borderColor: TARGET_COLORS[t]||'#888',
+    backgroundColor:'transparent',
+    borderWidth:1.5, pointRadius:2, tension:0,
+    spanGaps:false,
+  }));
+  G.charts['edaTimeline'] = new Chart(document.getElementById('edaTimelineChart'), {
+    type:'line', data:{labels,datasets},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:true,position:'top',labels:{color:'#8b949e',font:{size:10},boxWidth:10,padding:10}}},
+      scales:{
+        x:{ticks:{color:'#8b949e',font:{size:9},maxTicksLimit:20,maxRotation:30}, grid:{color:'rgba(48,54,61,0.4)'}},
+        y:{min:-0.1,max:1.1,ticks:{color:'#8b949e',font:{size:10},callback:v=>v===0?'0 (음성)':v===1?'1 (양성)':''},
+           grid:{color:'rgba(48,54,61,0.4)'}}
+      }
+    }
+  });
+}
+
+
+/* ════════════════════════════════════════════════
+   MLFLOW TAB
+════════════════════════════════════════════════ */
+const EXP_COLORS = {
+  baseline: '#8b5cf6',
+  improved: '#10b981',
+  r3:       '#3b82f6',
+  v2:       '#f59e0b',
+};
+const EXP_NAMES = ['baseline', 'improved', 'r3', 'v2'];
+let ML = { apiUrl: 'http://localhost:8000', connected: false, expData: [] };
+
+function getApiUrl() {
+  return (document.getElementById('apiUrlInput')?.value || 'http://localhost:8000').replace(/\/$/, '');
+}
+
+async function connectApi() {
+  const url = getApiUrl();
+  ML.apiUrl = url;
+  const dot  = document.getElementById('apiStatusDot');
+  const text = document.getElementById('apiStatusText');
+  dot.style.background  = '#f59e0b';
+  text.textContent = '연결 중...';
+  try {
+    const res = await fetch(url + '/health', { signal: AbortSignal.timeout(4000) });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      dot.style.background  = '#10b981';
+      text.textContent = '연결됨 · ' + (data.mlflow_uri || url);
+      ML.connected = true;
+      fetchAllExperiments();
+    } else { throw new Error('bad status'); }
+  } catch (e) {
+    dot.style.background  = '#ef4444';
+    text.textContent = '연결 실패 — 서버를 먼저 시작하세요';
+    ML.connected = false;
+  }
+}
+
+async function fetchAllExperiments() {
+  if (!ML.connected) { connectApi(); return; }
+  try {
+    const res  = await fetch(ML.apiUrl + '/experiments');
+    const data = await res.json();
+    ML.expData = data.experiments || [];
+    renderExpMetrics();
+    renderExpScoreChart();
+    renderExpDetailTable();
+    fetchRunHistory();
+  } catch (e) {
+    console.error('fetchAllExperiments error:', e);
+  }
+}
+
+function renderExpMetrics() {
+  const row = document.getElementById('expMetricsRow');
+  if (!row) return;
+  row.innerHTML = EXP_NAMES.map(name => {
+    const exp = ML.expData.find(e => e.experiment === name);
+    const score = exp?.leaderboard_score;
+    const color = EXP_COLORS[name] || '#888';
+    const isBest = ML.expData.length && ML.expData[0]?.experiment === name;
+    return `<div class="metric-card" style="border-color:${isBest ? color : 'var(--border)'}">
+      <div class="mc-label" style="color:${color}">${name}${isBest ? ' 🏆' : ''}</div>
+      <div class="mc-value" style="font-size:20px">${score != null ? score.toFixed(4) : '—'}</div>
+      <div class="mc-sub">leaderboard_score</div>
+    </div>`;
+  }).join('');
+}
+
+function renderExpScoreChart() {
+  destroyChart('expScore');
+  const labels = ML.expData.map(e => e.experiment);
+  const scores = ML.expData.map(e => e.leaderboard_score);
+  const colors = labels.map(n => (EXP_COLORS[n] || '#888') + 'cc');
+  if (!labels.length) return;
+  G.charts['expScore'] = new Chart(document.getElementById('expScoreChart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'leaderboard_score',
+        data: scores,
+        backgroundColor: colors,
+        borderRadius: 5, borderSkipped: false,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => `score: ${ctx.raw?.toFixed(4) ?? '—'}` } }
+      },
+      scales: {
+        x: { ticks: { color:'#8b949e', font:{size:12} }, grid: { color:'rgba(48,54,61,0.4)' } },
+        y: {
+          ticks: { color:'#8b949e', font:{size:10} }, grid: { color:'rgba(48,54,61,0.4)' },
+          title: { display:true, text:'Log-Loss (낮을수록 좋음)', color:'#8b949e', font:{size:10} }
+        }
+      }
+    }
+  });
+}
+
+function renderExpDetailTable() {
+  const tbody = document.getElementById('expDetailBody');
+  if (!tbody) return;
+  if (!ML.expData.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="color:var(--muted);text-align:center;padding:24px">데이터 없음</td></tr>';
+    return;
+  }
+  tbody.innerHTML = ML.expData.map((exp, i) => {
+    const color = EXP_COLORS[exp.experiment] || '#888';
+    const score = exp.leaderboard_score != null ? exp.leaderboard_score.toFixed(4) : '—';
+    const runId = exp.run_id ? exp.run_id.slice(0,8) + '...' : '—';
+    const params = exp.params ? Object.entries(exp.params).slice(0,3).map(([k,v])=>`${k}=${v}`).join(', ') : '—';
+    const badge = i === 0
+      ? `<span class="badge badge-green">🏆 Best</span>`
+      : `<span style="font-size:11px;color:var(--muted)">#${i+1}</span>`;
+    return `<tr>
+      <td><strong style="color:${color}">${exp.experiment}</strong></td>
+      <td style="font-family:monospace;font-size:13px">${score}</td>
+      <td style="font-family:monospace;font-size:11px;color:var(--muted)">${runId}</td>
+      <td style="font-size:11px;color:var(--muted)">${params}</td>
+      <td>${badge}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function fetchRunHistory() {
+  const expName = document.getElementById('expRunSelect')?.value || 'r3';
+  document.getElementById('runListExp').textContent = `— ${expName}`;
+  if (!ML.connected) return;
+  try {
+    const res  = await fetch(`${ML.apiUrl}/experiments/${expName}/runs?max_results=20`);
+    const data = await res.json();
+    renderRunHistChart(expName, data.runs || []);
+    renderRunListTable(expName, data.runs || []);
+  } catch (e) {
+    console.error('fetchRunHistory error:', e);
+  }
+}
+
+function renderRunHistChart(expName, runs) {
+  destroyChart('runHist');
+  if (!runs.length) return;
+  const color = EXP_COLORS[expName] || '#3b82f6';
+  const labels = runs.map((_, i) => `Run ${i+1}`).reverse();
+  const scores = runs.map(r => r.leaderboard_score).reverse();
+  G.charts['runHist'] = new Chart(document.getElementById('runHistChart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'leaderboard_score',
+        data: scores,
+        borderColor: color,
+        backgroundColor: color + '22',
+        borderWidth: 2, pointRadius: 4, pointBackgroundColor: color,
+        tension: 0.2, fill: true,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => `score: ${ctx.raw?.toFixed(4) ?? '—'}` } }
+      },
+      scales: {
+        x: { ticks: { color:'#8b949e', font:{size:10} }, grid: { color:'rgba(48,54,61,0.4)' } },
+        y: { ticks: { color:'#8b949e', font:{size:10} }, grid: { color:'rgba(48,54,61,0.4)' },
+             title: { display:true, text:'Log-Loss', color:'#8b949e', font:{size:10} } }
+      }
+    }
+  });
+}
+
+function renderRunListTable(expName, runs) {
+  const tbody = document.getElementById('runListBody');
+  if (!tbody) return;
+  const color = EXP_COLORS[expName] || '#3b82f6';
+  if (!runs.length) {
+    tbody.innerHTML = '<tr><td colspan="4" style="color:var(--muted);text-align:center;padding:24px">Run 없음</td></tr>';
+    return;
+  }
+  tbody.innerHTML = runs.map((run, i) => {
+    const score = run.leaderboard_score != null ? run.leaderboard_score.toFixed(4) : '—';
+    const runId = (run.run_id || '').slice(0, 12) + '...';
+    const params = run.params ? Object.entries(run.params).slice(0,4).map(([k,v])=>`${k}=${v}`).join(' · ') : '—';
+    const ts = run.start_time ? new Date(run.start_time).toLocaleString('ko-KR') : '—';
+    const isBest = i === 0;
+    return `<tr>
+      <td style="font-family:monospace;font-size:11px;color:var(--muted)">${runId}</td>
+      <td style="font-family:monospace;font-size:13px;color:${isBest ? color : 'var(--text)'};font-weight:${isBest?600:400}">
+        ${score}${isBest ? ' ★' : ''}
+      </td>
+      <td style="font-size:11px;color:var(--muted)">${params}</td>
+      <td style="font-size:11px;color:var(--muted)">${ts}</td>
+    </tr>`;
+  }).join('');
+}
+
+
+/* ════════════════════════════════════════════════
+   PIPELINE TAB
+════════════════════════════════════════════════ */
+function renderPipeline() {
+  const steps = [
+    { icon:'🗄️', name:'Raw Data', sub:'parquet × 12', highlight:false },
+    { icon:'⚙️', name:'Feature Eng.', sub:'pipeline_utils.py', highlight:false },
+    { icon:'📊', name:'Train Labels', sub:'metrics_train.csv', highlight:true },
+    { icon:'🧮', name:'Subject Mean', sub:'prior 계산', highlight:true },
+    { icon:'📅', name:'Temporal Blend', sub:'r3 핵심 로직', highlight:true },
+    { icon:'🔍', name:'OOF 검증', sub:'exclude_self', highlight:false },
+    { icon:'📈', name:'XAI 분석', sub:'기여도 해석', highlight:false },
+    { icon:'🚀', name:'Submission', sub:'submission_r3.csv', highlight:false },
+  ];
+  document.getElementById('pipelineViz').innerHTML = steps.map((s,i) =>
+    `${i>0?'<div class="pipe-arrow">→</div>':''}
+    <div class="pipe-step">
+      <div class="pipe-box ${s.highlight?'highlight':''}">
+        <div class="pb-icon">${s.icon}</div>
+        <div class="pb-name">${s.name}</div>
+        <div class="pb-sub">${s.sub}</div>
+      </div>
+    </div>`
+  ).join('');
+}
+
+/* ════════════════════════════════════════════════
+   INIT
+════════════════════════════════════════════════ */
+window.addEventListener('DOMContentLoaded', () => {
+  const sample = generateSample();
+  loadData(sample, 'sample');
+  renderPipeline();
+});
+</script>
+</body>
+</html>
