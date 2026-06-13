@@ -22,6 +22,12 @@ if tmux has-session -t "$SESSION" 2>/dev/null; then
     exit 0
 fi
 
+if pgrep -f "gunicorn.*mlflow" > /dev/null 2>&1; then
+    echo "Error: MLflow process already running outside of tmux."
+    echo "  Stop first: pkill -f 'gunicorn.*mlflow'"
+    exit 1
+fi
+
 tmux new-session -d -s "$SESSION" \
     "$MLFLOW_BIN server \
     --backend-store-uri sqlite:///$HOME/dacon_project/mlflow.db \
