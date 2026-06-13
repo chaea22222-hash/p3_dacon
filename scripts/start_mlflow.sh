@@ -35,14 +35,17 @@ tmux new-session -d -s "$SESSION" \
     --host 0.0.0.0 \
     --port 5000"
 
-sleep 2
+echo "Waiting for MLflow server to be ready..."
+for i in $(seq 1 10); do
+    if curl -s http://localhost:5000/health | grep -q "OK"; then
+        echo "MLflow server started successfully."
+        echo "  View logs : tmux attach -t $SESSION"
+        echo "  Dashboard : http://$SERVER_IP:5000"
+        exit 0
+    fi
+    sleep 1
+done
 
-if curl -s http://localhost:5000/health | grep -q "OK"; then
-    echo "MLflow server started successfully."
-    echo "  View logs : tmux attach -t $SESSION"
-    echo "  Dashboard : http://$SERVER_IP:5000"
-else
-    echo "MLflow server may have failed to start."
-    echo "  Check logs: tmux attach -t $SESSION"
-    exit 1
-fi
+echo "MLflow server may have failed to start."
+echo "  Check logs: tmux attach -t $SESSION"
+exit 1
