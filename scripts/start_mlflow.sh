@@ -13,10 +13,12 @@ if [ ! -f "$MLFLOW_BIN" ]; then
     exit 1
 fi
 
+SERVER_IP=$(hostname -I | awk '{print $1}')
+
 if tmux has-session -t "$SESSION" 2>/dev/null; then
     echo "MLflow server is already running (tmux session: '$SESSION')"
     echo "  View logs : tmux attach -t $SESSION"
-    echo "  Dashboard : http://localhost:5000"
+    echo "  Dashboard : http://$SERVER_IP:5000"
     exit 0
 fi
 
@@ -32,7 +34,7 @@ sleep 2
 if curl -s http://localhost:5000/health | grep -q "OK"; then
     echo "MLflow server started successfully."
     echo "  View logs : tmux attach -t $SESSION"
-    echo "  Dashboard : http://localhost:5000"
+    echo "  Dashboard : http://$SERVER_IP:5000"
 else
     echo "MLflow server may have failed to start."
     echo "  Check logs: tmux attach -t $SESSION"
