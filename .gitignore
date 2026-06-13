@@ -14,3 +14,5 @@ runs/
 .ipynb_checkpoints/
 
 .env
+
+docs/report/
