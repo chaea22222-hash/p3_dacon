@@ -101,6 +101,37 @@ uv run python src/run_first_submission.py
 | `train_r3.py` | 피험자 평균 + 시간 가중 보간 | `r3` |
 | `train_v2.py` | CatBoost + 피험자 평균 (시간 기반 분할) | `v2` |
 
+## 6. 예측 서버 및 XAI 대시보드 실행 (선택)
+
+팀 베이스라인(r3) 예측 결과와 MLflow 실험을 웹 UI로 확인하려면 아래 순서로 실행합니다.
+
+MLflow 서버가 이미 실행 중이어야 합니다 (4단계 참고).
+
+**FastAPI 예측 서버 시작:**
+
+```bash
+uv run uvicorn api.main:app --host 0.0.0.0 --port 8151
+```
+
+**브라우저에서 접속:**
+
+```
+http://서버IP:8151/dashboard
+```
+
+### 대시보드 탭 구성
+
+| 탭 | 내용 |
+|----|------|
+| 📊 예측 결과 | r3 OOF 예측 확률, 피험자별·요일별·날짜별 분포 |
+| 🔬 데이터 분석 | 타겟별 양성률, 상관관계, 결측값, 피험자 시계열 EDA |
+| 🔍 XAI 해석 | 특성 기여도(SHAP-style), alpha 블렌딩 시각화, OOF Log-Loss |
+| 🧪 MLflow 실험 | 4개 실험 leaderboard_score 비교, Run 히스토리 |
+| 🔄 파이프라인 | MLOps 전체 흐름도, r3 수식, 실험 히스토리 |
+| 📂 데이터 로드 | CSV 업로드 (없으면 샘플 데이터로 자동 시연) |
+
+API 문서(Swagger UI): `http://서버IP:8151/docs`
+
 ## 참고 문서
 
 - [CONTEXT.md](../CONTEXT.md) — 프로젝트 용어 정의
