@@ -13,12 +13,10 @@ if [ ! -f "$MLFLOW_BIN" ]; then
     exit 1
 fi
 
-SERVER_IP=$(hostname -I | awk '{print $1}')
-
 if tmux has-session -t "$SESSION" 2>/dev/null; then
     echo "MLflow server is already running (tmux session: '$SESSION')"
     echo "  View logs : tmux attach -t $SESSION"
-    echo "  Dashboard : http://$SERVER_IP:5000"
+    echo "  Dashboard : http://localhost:5000"
     exit 0
 fi
 
@@ -32,7 +30,7 @@ tmux new-session -d -s "$SESSION" \
     "$MLFLOW_BIN server \
     --backend-store-uri sqlite:///$HOME/dacon_project/mlflow.db \
     --default-artifact-root $HOME/dacon_project/mlflow-artifacts \
-    --host 0.0.0.0 \
+    --host 127.0.0.1 \
     --port 5000"
 
 echo "Waiting for MLflow server to be ready..."
@@ -40,7 +38,7 @@ for i in $(seq 1 10); do
     if curl -s http://localhost:5000/health | grep -q "OK"; then
         echo "MLflow server started successfully."
         echo "  View logs : tmux attach -t $SESSION"
-        echo "  Dashboard : http://$SERVER_IP:5000"
+        echo "  Dashboard : http://localhost:5000"
         exit 0
     fi
     sleep 1

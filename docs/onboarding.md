@@ -110,7 +110,7 @@ MLflow 서버가 이미 실행 중이어야 합니다 (4단계 참고).
 **FastAPI 예측 서버 시작:**
 
 ```bash
-uv run uvicorn api.main:app --host 0.0.0.0 --port 8151
+bash scripts/start_fastapi.sh
 ```
 
 **브라우저에서 접속:**

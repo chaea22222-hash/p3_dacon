@@ -86,7 +86,7 @@ uv run src/run_first_submission.py
 cp .env.example .env
 ```
 
-서버에 접속된 상태에서 `http://서버IP:5000`으로 MLflow 대시보드에 접근할 수 있습니다.
+서버에 접속된 상태에서 `http://localhost:5000`으로 MLflow 대시보드에 접근할 수 있습니다.
 
 MLflow 서버 시작 (중복 실행 방지 포함):
 
@@ -131,13 +131,13 @@ bash scripts/start_mlflow.sh
 **2. FastAPI 예측 서버 시작**
 
 ```bash
-uv run uvicorn api.main:app --host 0.0.0.0 --port 8151
+bash scripts/start_fastapi.sh
 ```
 
 **3. 브라우저에서 접속**
 
 ```
-http://서버IP:8151/dashboard
+http://localhost:8151/dashboard
 ```
 
 ### 대시보드 탭 구성
