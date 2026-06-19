@@ -17,7 +17,7 @@ _Avoid_: 공유 디렉토리, 데이터 폴더
 _Avoid_: MLflow, 트래킹 서버
 
 **Experiment**:
-MLflow에서 스크립트 단위로 구분되는 그룹 네임스페이스. `mlflow.set_experiment()`로 지정하며 현재 4개(baseline, improved, r3, v2)가 존재한다. 같은 Experiment 안에 여러 Run이 누적된다.
+MLflow에서 모델 전략 단위로 구분되는 그룹 네임스페이스. `mlflow.set_experiment("팀원id/모델이름")`으로 지정하며, API가 MLflow에서 자동 발견한다(하드코딩 없음). 같은 Experiment 안에 여러 Run이 누적되며, 전처리 조합마다 별도 Run으로 기록된다.
 _Avoid_: 실험 파일, 버전 스크립트
 
 **Run**:
@@ -27,6 +27,22 @@ _Avoid_: 실험, 학습 기록
 **DVC Metadata**:
 `data/raw.dvc`. Working Data Directory의 MD5 해시와 구조 정보를 담은 소형 파일. git으로 추적되며 데이터 버전 이력을 기록.
 _Avoid_: dvc 파일, 메타파일
+
+**Member Workspace**:
+`src/팀원id/` 디렉토리. 전처리 폴더와 하나 이상의 모델 폴더로 구성된다. 팀원이 독립적으로 실험할 수 있는 단위.
+_Avoid_: 팀원 폴더, 개인 디렉토리
+
+**Member Preprocessing**:
+`src/팀원id/전처리/` 디렉토리. 해당 팀원이 작성한 전처리 파이프라인. 출력은 `outputs/팀원id/features_train.csv`, `outputs/팀원id/features_test.csv`이며 동일 팀원의 여러 모델과 다른 팀원의 모델이 공유해서 사용할 수 있다.
+_Avoid_: 전처리 스크립트, feature 생성기
+
+**Model Workspace**:
+`src/팀원id/모델이름/` 디렉토리. 하나의 모델 전략을 구현하는 단위. 출력은 `outputs/팀원id/모델이름/`에 저장된다. MLflow Experiment 이름은 `팀원id/모델이름`을 사용한다.
+_Avoid_: 모델 폴더, 학습 스크립트
+
+**preprocess_by**:
+MLflow Run parameter. 해당 Run에서 사용한 Member Preprocessing의 팀원id를 기록한다(예: `"preprocess_by": "jinseok"`). 동일 모델에 서로 다른 전처리를 적용한 Run을 대시보드에서 필터링·비교하는 기준이 된다.
+_Avoid_: 전처리자, preprocessing_owner
 
 **Leaderboard Score**:
 대회 공식 평가지표. K개 타깃에 대한 Binary Log Loss의 평균.
